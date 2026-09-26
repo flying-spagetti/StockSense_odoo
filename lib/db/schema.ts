@@ -11,7 +11,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const movementKind = pgEnum("movement_kind", ["receipt", "issue"]);
+export const movementKind = pgEnum("movement_kind", [
+  "receipt",
+  "issue",
+  "transfer",
+  "adjustment",
+]);
 
 export const movementStatus = pgEnum("movement_status", [
   "draft",
