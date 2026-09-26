@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useCallback } from "react";
 import { validateTransferAction, cancelTransferAction } from "@/app/actions/transfers";
 import { TransferFormModal } from "@/components/transfers/transfer-form-modal";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,12 @@ export function TransfersClient({
 
   const [editingTransfer, setEditingTransfer] = useState<TransferDetailRow | null>(null);
 
-  const showToast = (message: string, isError: boolean = false) => {
+  const showToast = useCallback((message: string, isError: boolean = false) => {
     setToast({ message, isError });
     setTimeout(() => {
       setToast(null);
     }, 6000);
-  };
+  }, []);
 
   const handleEdit = (transfer: TransferDetailRow) => {
     setEditingTransfer(transfer);

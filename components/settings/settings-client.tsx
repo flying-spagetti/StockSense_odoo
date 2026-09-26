@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useCallback } from "react";
 import { toggleWarehouseStatusAction } from "@/app/actions/warehouses";
 import { WarehouseFormModal } from "@/components/settings/warehouse-form-modal";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,12 @@ export function SettingsClient({ warehouses }: SettingsClientProps) {
   const [toast, setToast] = useState<{ message: string; isError?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const showToast = (message: string, isError: boolean = false) => {
+  const showToast = useCallback((message: string, isError: boolean = false) => {
     setToast({ message, isError });
     setTimeout(() => {
       setToast(null);
     }, 4500);
-  };
+  }, []);
 
   const handleEdit = (wh: WarehouseRow) => {
     setEditingWarehouse(wh);

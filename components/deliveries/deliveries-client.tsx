@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useCallback } from "react";
 import { validateDeliveryAction, cancelDeliveryAction } from "@/app/actions/deliveries";
 import { DeliveryFormModal } from "@/components/deliveries/delivery-form-modal";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,12 @@ export function DeliveriesClient({
 
   const [editingDelivery, setEditingDelivery] = useState<DeliveryDetailRow | null>(null);
 
-  const showToast = (message: string, isError: boolean = false) => {
+  const showToast = useCallback((message: string, isError: boolean = false) => {
     setToast({ message, isError });
     setTimeout(() => {
       setToast(null);
     }, 5500);
-  };
+  }, []);
 
   const handleEdit = (delivery: DeliveryDetailRow) => {
     setEditingDelivery(delivery);

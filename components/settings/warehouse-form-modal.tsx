@@ -29,12 +29,17 @@ export function WarehouseFormModal({
   const [state, formAction, isPending] = useActionState(actionToUse, initialState);
   const errors = state?.errors ?? {};
 
+  const handledStateRef = React.useRef(state);
+
   useEffect(() => {
-    if (state?.success && state.message) {
-      onSuccessToast(state.message);
-      onClose();
-    } else if (state && !state.success && state.message) {
-      onSuccessToast(state.message, true);
+    if (state && state !== handledStateRef.current) {
+      handledStateRef.current = state;
+      if (state.success && state.message) {
+        onSuccessToast(state.message);
+        onClose();
+      } else if (!state.success && state.message) {
+        onSuccessToast(state.message, true);
+      }
     }
   }, [state, onSuccessToast, onClose]);
 

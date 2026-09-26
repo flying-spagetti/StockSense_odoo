@@ -108,10 +108,15 @@ export function ReceiptFormModal({
     return products.find((p) => p.id === selectedProductId);
   }, [products, selectedProductId]);
 
+  const handledStateRef = React.useRef(state);
+
   useEffect(() => {
-    if (state?.success && state.message) {
-      onSuccessToast(state.message);
-      onClose();
+    if (state && state !== handledStateRef.current) {
+      handledStateRef.current = state;
+      if (state.success && state.message) {
+        onSuccessToast(state.message);
+        onClose();
+      }
     }
   }, [state, onSuccessToast, onClose]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useCallback } from "react";
 import { validateAdjustmentAction, cancelAdjustmentAction } from "@/app/actions/adjustments";
 import { AdjustmentFormModal } from "@/components/adjustments/adjustment-form-modal";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,12 @@ export function AdjustmentsClient({
 
   const [editingAdjustment, setEditingAdjustment] = useState<AdjustmentDetailRow | null>(null);
 
-  const showToast = (message: string, isError: boolean = false) => {
+  const showToast = useCallback((message: string, isError: boolean = false) => {
     setToast({ message, isError });
     setTimeout(() => {
       setToast(null);
     }, 6000);
-  };
+  }, []);
 
   const handleEdit = (adj: AdjustmentDetailRow) => {
     setEditingAdjustment(adj);

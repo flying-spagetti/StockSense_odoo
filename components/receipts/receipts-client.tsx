@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useCallback } from "react";
 import { validateReceiptAction, cancelReceiptAction } from "@/app/actions/receipts";
 import { ReceiptFormModal } from "@/components/receipts/receipt-form-modal";
 import { Button } from "@/components/ui/button";
@@ -40,12 +40,12 @@ export function ReceiptsClient({
 
   const [editingReceipt, setEditingReceipt] = useState<ReceiptDetailRow | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 4500);
-  };
+  }, []);
 
   const handleEdit = (receipt: ReceiptDetailRow) => {
     setEditingReceipt(receipt);
