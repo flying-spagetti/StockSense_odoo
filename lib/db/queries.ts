@@ -86,6 +86,26 @@ export type AdjustmentDetailRow = {
   createdAt: Date;
 };
 
+export type MoveHistoryRow = {
+  id: string;
+  reference: string;
+  kind: "receipt" | "issue" | "transfer" | "adjustment";
+  typeLabel: "Receipt" | "Delivery" | "Transfer" | "Adjustment";
+  productId: string;
+  productName: string;
+  productSku: string;
+  productCategory: string;
+  productUnit: string;
+  supplierOrCustomer: string | null;
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  quantity: number;
+  signedQuantity: number;
+  status: "draft" | "waiting" | "ready" | "done" | "canceled";
+  note: string | null;
+  createdAt: Date;
+};
+
 // In-memory fallback store for offline/demo/testing environments
 const fallbackProducts: ProductRow[] = [
   {
@@ -1665,5 +1685,140 @@ export async function cancelAdjustmentById(id: string): Promise<boolean> {
   }
   return false;
 }
+
+/**
+ * Move History / Stock Ledger Queries
+ * Returns unified movements across Receipts, Deliveries, Transfers, and Adjustments, newest first.
+ */
+export async function listMoveHistory(): Promise<MoveHistoryRow[]> {
+  try {
+    const rows = await db
+      .select({
+        id: stockMovements.id,
+        reference: stockMovements.reference,
+        kind: stockMovements.kind,
+        supplier: stockMovements.supplier,
+        productId: stockMovements.productId,
+        productName: products.name,
+        productSku: products.sku,
+        productCategory: products.category,
+        productUnit: products.unit,
+        quantity: stockMovements.quantity,
+        status: stockMovements.status,
+        fromLocationId: stockMovements.fromLocationId,
+        toLocationId: stockMovements.toLocationId,
+        note: stockMovements.note,
+        createdAt: stockMovements.createdAt,
+      })
+      .from(stockMovements)
+      .innerJoin(products, eq(stockMovements.productId, products.id))
+      .orderBy(desc(stockMovements.createdAt));
+
+    if (rows.length > 0) {
+      return rows.map((r) => {
+        const kind = r.kind as "receipt" | "issue" | "transfer" | "adjustment";
+        let typeLabel: "Receipt" | "Delivery" | "Transfer" | "Adjustment";
+        let signedQuantity = r.quantity;
+
+        if (kind === "receipt") {
+          typeLabel = "Receipt";
+          signedQuantity = r.quantity;
+        } else if (kind === "issue") {
+          typeLabel = "Delivery";
+          signedQuantity = -r.quantity;
+        } else if (kind === "transfer") {
+          typeLabel = "Transfer";
+          signedQuantity = r.quantity;
+        } else {
+          typeLabel = "Adjustment";
+          if (r.toLocationId !== null && r.fromLocationId === null) {
+            signedQuantity = r.quantity;
+          } else if (r.fromLocationId !== null && r.toLocationId === null) {
+            signedQuantity = -r.quantity;
+          } else {
+            signedQuantity = r.quantity;
+          }
+        }
+
+        return {
+          id: r.id,
+          reference: r.reference || "WH/MOV/0000",
+          kind,
+          typeLabel,
+          productId: r.productId,
+          productName: r.productName,
+          productSku: r.productSku,
+          productCategory: r.productCategory || "General",
+          productUnit: r.productUnit,
+          supplierOrCustomer: r.supplier || null,
+          fromLocationId: r.fromLocationId || null,
+          toLocationId: r.toLocationId || null,
+          quantity: r.quantity,
+          signedQuantity,
+          status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+          note: r.note || null,
+          createdAt: r.createdAt,
+        };
+      });
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const allMoves = [
+    ...fallbackReceiptMovements,
+    ...fallbackIssueMovements,
+    ...fallbackTransferMovements,
+    ...fallbackAdjustmentMovements,
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  return allMoves.map((m) => {
+    const prod = fallbackProducts.find((p) => p.id === m.productId);
+    const kind = m.kind;
+    let typeLabel: "Receipt" | "Delivery" | "Transfer" | "Adjustment";
+    let signedQuantity = m.quantity;
+
+    if (kind === "receipt") {
+      typeLabel = "Receipt";
+      signedQuantity = m.quantity;
+    } else if (kind === "issue") {
+      typeLabel = "Delivery";
+      signedQuantity = -m.quantity;
+    } else if (kind === "transfer") {
+      typeLabel = "Transfer";
+      signedQuantity = m.quantity;
+    } else {
+      typeLabel = "Adjustment";
+      if (m.toLocationId !== null && m.fromLocationId === null) {
+        signedQuantity = m.quantity;
+      } else if (m.fromLocationId !== null && m.toLocationId === null) {
+        signedQuantity = -m.quantity;
+      } else {
+        signedQuantity = m.quantity;
+      }
+    }
+
+    return {
+      id: m.id,
+      reference: m.reference,
+      kind,
+      typeLabel,
+      productId: m.productId,
+      productName: prod?.name || "Unknown Product",
+      productSku: prod?.sku || "SKU-0000",
+      productCategory: prod?.category || "General",
+      productUnit: prod?.unit || "pcs",
+      supplierOrCustomer: m.supplier || null,
+      fromLocationId: m.fromLocationId || null,
+      toLocationId: m.toLocationId || null,
+      quantity: m.quantity,
+      signedQuantity,
+      status: m.status,
+      note: m.note || null,
+      createdAt: m.createdAt,
+    };
+  });
+}
+
 
 
