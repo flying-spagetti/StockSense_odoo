@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -88,3 +89,23 @@ export type Product = typeof products.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type MovementKind = (typeof movementKind.enumValues)[number];
 export type MovementStatus = (typeof movementStatus.enumValues)[number];
+
+export const warehouses = pgTable(
+  "warehouses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    address: text("address"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("warehouses_code_unique").on(table.code),
+  ],
+);
+
+export type Warehouse = typeof warehouses.$inferSelect;
+

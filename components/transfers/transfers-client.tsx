@@ -12,6 +12,7 @@ import {
   CheckCircleIcon,
   XIcon,
   AlertTriangleIcon,
+  EditIcon,
 } from "@/components/ui/icons";
 import type { TransferDetailRow, ProductRow, InventoryRow } from "@/lib/db/queries";
 
@@ -34,11 +35,18 @@ export function TransfersClient({
   const [toast, setToast] = useState<{ message: string; isError?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const [editingTransfer, setEditingTransfer] = useState<TransferDetailRow | null>(null);
+
   const showToast = (message: string, isError: boolean = false) => {
     setToast({ message, isError });
     setTimeout(() => {
       setToast(null);
     }, 6000);
+  };
+
+  const handleEdit = (transfer: TransferDetailRow) => {
+    setEditingTransfer(transfer);
+    setIsModalOpen(true);
   };
 
   const handleValidate = (id: string, reference: string) => {
@@ -148,7 +156,10 @@ export function TransfersClient({
         </div>
 
         <Button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingTransfer(null);
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2"
         >
           <PlusIcon className="h-4 w-4" />
@@ -356,6 +367,14 @@ export function TransfersClient({
                         {transfer.status === "draft" && (
                           <>
                             <button
+                              disabled={isPending}
+                              onClick={() => handleEdit(transfer)}
+                              className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50"
+                            >
+                              <EditIcon className="h-3.5 w-3.5" />
+                              <span>Edit</span>
+                            </button>
+                            <button
                               disabled={isPending || isSameLoc}
                               onClick={() => handleValidate(transfer.id, transfer.reference)}
                               className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500 transition disabled:opacity-50"
@@ -399,13 +418,17 @@ export function TransfersClient({
         </div>
       </div>
 
-      {/* New Transfer Modal */}
+      {/* Transfer Form Modal */}
       <TransferFormModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingTransfer(null);
+        }}
         products={products}
         inventory={inventory}
         defaultReference={nextReference}
+        transferToEdit={editingTransfer}
         onSuccessToast={showToast}
       />
     </div>

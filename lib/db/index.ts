@@ -17,7 +17,14 @@ function createPool() {
           if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
             const [key, ...val] = trimmed.split("=");
             if (key && !process.env[key.trim()]) {
-              process.env[key.trim()] = val.join("=").trim();
+              let parsedVal = val.join("=").trim();
+              if (
+                (parsedVal.startsWith('"') && parsedVal.endsWith('"')) ||
+                (parsedVal.startsWith("'") && parsedVal.endsWith("'"))
+              ) {
+                parsedVal = parsedVal.slice(1, -1);
+              }
+              process.env[key.trim()] = parsedVal;
             }
           }
         }
@@ -27,12 +34,19 @@ function createPool() {
     }
   }
 
-  const connectionString = process.env.DATABASE_URL;
+  let connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is not set. Copy .env.example to .env and set it before running the app.",
     );
+  }
+
+  if (
+    (connectionString.startsWith('"') && connectionString.endsWith('"')) ||
+    (connectionString.startsWith("'") && connectionString.endsWith("'"))
+  ) {
+    connectionString = connectionString.slice(1, -1);
   }
 
   return new Pool({ connectionString });

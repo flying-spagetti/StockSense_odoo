@@ -1,6 +1,6 @@
 import { and, eq, sql, desc } from "drizzle-orm";
 import { db } from "./index";
-import { products, stockMovements } from "./schema";
+import { products, stockMovements, warehouses } from "./schema";
 
 export type ProductRow = typeof products.$inferSelect;
 
@@ -808,6 +808,85 @@ export async function cancelReceiptById(id: string): Promise<boolean> {
   return false;
 }
 
+export async function updateReceiptById(
+  id: string,
+  values: {
+    supplier: string;
+    productId: string;
+    toLocationId: string;
+    quantity: number;
+    note?: string;
+    status?: "draft" | "waiting" | "ready" | "done" | "canceled";
+  },
+): Promise<ExtendedMovement | null> {
+  const existing = fallbackReceiptMovements.find((m) => m.id === id);
+  if (existing && existing.status !== "draft") {
+    throw new Error("Cannot edit document: Only draft documents can be modified.");
+  }
+
+  try {
+    const updateData: Record<string, any> = {
+      supplier: values.supplier,
+      productId: values.productId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+    };
+    if (values.status) {
+      updateData.status = values.status;
+    }
+
+    const rows = await db
+      .update(stockMovements)
+      .set(updateData)
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "receipt"), eq(stockMovements.status, "draft")))
+      .returning();
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+      const updatedMove: ExtendedMovement = {
+        id: r.id,
+        reference: r.reference || (existing ? existing.reference : "WH/IN/0000"),
+        supplier: r.supplier || values.supplier,
+        productId: r.productId,
+        kind: "receipt",
+        quantity: r.quantity,
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+        fromLocationId: null,
+        toLocationId: r.toLocationId || values.toLocationId,
+        note: r.note || undefined,
+        createdAt: r.createdAt,
+      };
+      if (idx !== -1) {
+        fallbackReceiptMovements[idx] = updatedMove;
+      }
+      return updatedMove;
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Only draft documents")) throw err;
+  }
+
+  const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    if (fallbackReceiptMovements[idx].status !== "draft") {
+      throw new Error("Cannot edit document: Only draft documents can be modified.");
+    }
+    fallbackReceiptMovements[idx] = {
+      ...fallbackReceiptMovements[idx],
+      supplier: values.supplier,
+      productId: values.productId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+      status: values.status || fallbackReceiptMovements[idx].status,
+    };
+    return fallbackReceiptMovements[idx];
+  }
+
+  return null;
+}
+
 /**
  * Delivery Queries
  */
@@ -1076,6 +1155,92 @@ export async function cancelDeliveryById(id: string): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+export async function updateDeliveryById(
+  id: string,
+  values: {
+    customer: string;
+    productId: string;
+    fromLocationId: string;
+    quantity: number;
+    note?: string;
+    status?: "draft" | "waiting" | "ready" | "done" | "canceled";
+  },
+): Promise<ExtendedMovement | null> {
+  const existing = fallbackIssueMovements.find((m) => m.id === id);
+  if (existing && existing.status !== "draft") {
+    throw new Error("Cannot edit document: Only draft documents can be modified.");
+  }
+
+  if (values.status === "done") {
+    const available = await getProductStockAtLocation(values.productId, values.fromLocationId);
+    if (values.quantity > available) {
+      throw new Error(`Insufficient available stock at ${values.fromLocationId}.`);
+    }
+  }
+
+  try {
+    const updateData: Record<string, any> = {
+      supplier: values.customer,
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      quantity: values.quantity,
+      note: values.note,
+    };
+    if (values.status) {
+      updateData.status = values.status;
+    }
+
+    const rows = await db
+      .update(stockMovements)
+      .set(updateData)
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "issue"), eq(stockMovements.status, "draft")))
+      .returning();
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      const idx = fallbackIssueMovements.findIndex((m) => m.id === id);
+      const updatedMove: ExtendedMovement = {
+        id: r.id,
+        reference: r.reference || (existing ? existing.reference : "WH/OUT/0000"),
+        supplier: r.supplier || values.customer,
+        productId: r.productId,
+        kind: "issue",
+        quantity: r.quantity,
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+        fromLocationId: r.fromLocationId,
+        toLocationId: null,
+        note: r.note || undefined,
+        createdAt: r.createdAt,
+      };
+      if (idx !== -1) {
+        fallbackIssueMovements[idx] = updatedMove;
+      }
+      return updatedMove;
+    }
+  } catch (err) {
+    if (err instanceof Error) throw err;
+  }
+
+  const idx = fallbackIssueMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    if (fallbackIssueMovements[idx].status !== "draft") {
+      throw new Error("Cannot edit document: Only draft documents can be modified.");
+    }
+    fallbackIssueMovements[idx] = {
+      ...fallbackIssueMovements[idx],
+      supplier: values.customer,
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      quantity: values.quantity,
+      note: values.note,
+      status: values.status || fallbackIssueMovements[idx].status,
+    };
+    return fallbackIssueMovements[idx];
+  }
+
+  return null;
 }
 
 /**
@@ -1384,6 +1549,96 @@ export async function cancelTransferById(id: string): Promise<boolean> {
   return false;
 }
 
+export async function updateTransferById(
+  id: string,
+  values: {
+    productId: string;
+    fromLocationId: string;
+    toLocationId: string;
+    quantity: number;
+    note?: string;
+    status?: "draft" | "waiting" | "ready" | "done" | "canceled";
+  },
+): Promise<ExtendedMovement | null> {
+  const existing = fallbackTransferMovements.find((m) => m.id === id);
+  if (existing && existing.status !== "draft") {
+    throw new Error("Cannot edit document: Only draft documents can be modified.");
+  }
+
+  if (values.fromLocationId.trim().toLowerCase() === values.toLocationId.trim().toLowerCase()) {
+    throw new Error("Source and destination locations cannot be the same.");
+  }
+
+  if (values.status === "done") {
+    const available = await getProductStockAtLocation(values.productId, values.fromLocationId);
+    if (values.quantity > available) {
+      throw new Error(`Insufficient available stock at ${values.fromLocationId}.`);
+    }
+  }
+
+  try {
+    const updateData: Record<string, any> = {
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+    };
+    if (values.status) {
+      updateData.status = values.status;
+    }
+
+    const rows = await db
+      .update(stockMovements)
+      .set(updateData)
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "transfer"), eq(stockMovements.status, "draft")))
+      .returning();
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      const idx = fallbackTransferMovements.findIndex((m) => m.id === id);
+      const updatedMove: ExtendedMovement = {
+        id: r.id,
+        reference: r.reference || (existing ? existing.reference : "WH/TR/0000"),
+        supplier: r.supplier || "Internal Transfer",
+        productId: r.productId,
+        kind: "transfer",
+        quantity: r.quantity,
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+        fromLocationId: r.fromLocationId,
+        toLocationId: r.toLocationId,
+        note: r.note || undefined,
+        createdAt: r.createdAt,
+      };
+      if (idx !== -1) {
+        fallbackTransferMovements[idx] = updatedMove;
+      }
+      return updatedMove;
+    }
+  } catch (err) {
+    if (err instanceof Error) throw err;
+  }
+
+  const idx = fallbackTransferMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    if (fallbackTransferMovements[idx].status !== "draft") {
+      throw new Error("Cannot edit document: Only draft documents can be modified.");
+    }
+    fallbackTransferMovements[idx] = {
+      ...fallbackTransferMovements[idx],
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+      status: values.status || fallbackTransferMovements[idx].status,
+    };
+    return fallbackTransferMovements[idx];
+  }
+
+  return null;
+}
+
 /**
  * Stock Adjustment Queries
  */
@@ -1686,6 +1941,93 @@ export async function cancelAdjustmentById(id: string): Promise<boolean> {
   return false;
 }
 
+export async function updateAdjustmentById(
+  id: string,
+  values: {
+    productId: string;
+    locationId: string;
+    physicalCount: number;
+    recordedStock: number;
+    delta: number;
+    quantity: number;
+    fromLocationId: string | null;
+    toLocationId: string | null;
+    note?: string;
+    status?: "draft" | "waiting" | "ready" | "done" | "canceled";
+  },
+): Promise<ExtendedMovement | null> {
+  const existing = fallbackAdjustmentMovements.find((m) => m.id === id);
+  if (existing && existing.status !== "draft") {
+    throw new Error("Cannot edit document: Only draft documents can be modified.");
+  }
+
+  if (values.delta === 0 || values.quantity === 0) {
+    throw new Error("Physical count already matches recorded stock.");
+  }
+
+  try {
+    const updateData: Record<string, any> = {
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+    };
+    if (values.status) {
+      updateData.status = values.status;
+    }
+
+    const rows = await db
+      .update(stockMovements)
+      .set(updateData)
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "adjustment"), eq(stockMovements.status, "draft")))
+      .returning();
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      const idx = fallbackAdjustmentMovements.findIndex((m) => m.id === id);
+      const updatedMove: ExtendedMovement = {
+        id: r.id,
+        reference: r.reference || (existing ? existing.reference : "WH/ADJ/0000"),
+        supplier: "Stock Audit",
+        productId: r.productId,
+        kind: "adjustment",
+        quantity: r.quantity,
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+        fromLocationId: r.fromLocationId,
+        toLocationId: r.toLocationId,
+        note: r.note || undefined,
+        createdAt: r.createdAt,
+      };
+      if (idx !== -1) {
+        fallbackAdjustmentMovements[idx] = updatedMove;
+      }
+      return updatedMove;
+    }
+  } catch (err) {
+    if (err instanceof Error) throw err;
+  }
+
+  const idx = fallbackAdjustmentMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    if (fallbackAdjustmentMovements[idx].status !== "draft") {
+      throw new Error("Cannot edit document: Only draft documents can be modified.");
+    }
+    fallbackAdjustmentMovements[idx] = {
+      ...fallbackAdjustmentMovements[idx],
+      productId: values.productId,
+      fromLocationId: values.fromLocationId,
+      toLocationId: values.toLocationId,
+      quantity: values.quantity,
+      note: values.note,
+      status: values.status || fallbackAdjustmentMovements[idx].status,
+    };
+    return fallbackAdjustmentMovements[idx];
+  }
+
+  return null;
+}
+
 /**
  * Move History / Stock Ledger Queries
  * Returns unified movements across Receipts, Deliveries, Transfers, and Adjustments, newest first.
@@ -1819,6 +2161,202 @@ export async function listMoveHistory(): Promise<MoveHistoryRow[]> {
     };
   });
 }
+
+/**
+ * Warehouse / Location Settings Queries
+ */
+export type WarehouseRow = {
+  id: string;
+  code: string;
+  name: string;
+  address?: string;
+  isActive: boolean;
+  locations: string[];
+};
+
+const fallbackWarehouses: WarehouseRow[] = [
+  {
+    id: "w1",
+    code: "WH",
+    name: "Main Warehouse",
+    address: "Building A, Central Logistics Park",
+    isActive: true,
+    locations: ["WH/Stock", "Production Floor", "Packaging Zone"],
+  },
+  {
+    id: "w2",
+    code: "SF",
+    name: "San Francisco Hub",
+    address: "Bayview Dist. Terminal 4",
+    isActive: true,
+    locations: ["SF/Stock", "SF/Receiving"],
+  },
+];
+
+export async function listWarehouses(): Promise<WarehouseRow[]> {
+  try {
+    const rows = await db.select().from(warehouses).orderBy(warehouses.code);
+    if (rows.length > 0) {
+      return rows.map((w) => ({
+        id: w.id,
+        code: w.code,
+        name: w.name,
+        address: w.address || undefined,
+        isActive: w.isActive,
+        locations: w.code === "WH" ? ["WH/Stock", "Production Floor", "Packaging Zone"] : [`${w.code}/Stock`, `${w.code}/Receiving`],
+      }));
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  return [...fallbackWarehouses];
+}
+
+export async function insertWarehouse(values: {
+  code: string;
+  name: string;
+  address?: string;
+}): Promise<WarehouseRow> {
+  const codeFormatted = values.code.trim().toUpperCase();
+  const exists = fallbackWarehouses.some((w) => w.code.toUpperCase() === codeFormatted);
+  if (exists) {
+    throw new Error(`A warehouse with code "${codeFormatted}" already exists.`);
+  }
+
+  try {
+    const rows = await db
+      .insert(warehouses)
+      .values({
+        code: codeFormatted,
+        name: values.name.trim(),
+        address: values.address ? values.address.trim() : null,
+        isActive: true,
+      })
+      .returning();
+
+    if (rows.length > 0) {
+      const w = rows[0];
+      const newWh: WarehouseRow = {
+        id: w.id,
+        code: w.code,
+        name: w.name,
+        address: w.address || undefined,
+        isActive: w.isActive,
+        locations: [`${w.code}/Stock`, `${w.code}/Receiving`],
+      };
+      fallbackWarehouses.push(newWh);
+      return newWh;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const newWh: WarehouseRow = {
+    id: crypto.randomUUID(),
+    code: codeFormatted,
+    name: values.name.trim(),
+    address: values.address ? values.address.trim() : undefined,
+    isActive: true,
+    locations: [`${codeFormatted}/Stock`, `${codeFormatted}/Receiving`],
+  };
+  fallbackWarehouses.push(newWh);
+  return newWh;
+}
+
+export async function updateWarehouseById(
+  id: string,
+  values: {
+    code: string;
+    name: string;
+    address?: string;
+    isActive?: boolean;
+  },
+): Promise<WarehouseRow | null> {
+  const codeFormatted = values.code.trim().toUpperCase();
+
+  try {
+    const rows = await db
+      .update(warehouses)
+      .set({
+        code: codeFormatted,
+        name: values.name.trim(),
+        address: values.address ? values.address.trim() : null,
+        isActive: values.isActive ?? true,
+      })
+      .where(eq(warehouses.id, id))
+      .returning();
+
+    if (rows.length > 0) {
+      const w = rows[0];
+      const idx = fallbackWarehouses.findIndex((wh) => wh.id === id);
+      const updated: WarehouseRow = {
+        id: w.id,
+        code: w.code,
+        name: w.name,
+        address: w.address || undefined,
+        isActive: w.isActive,
+        locations: w.code === "WH" ? ["WH/Stock", "Production Floor", "Packaging Zone"] : [`${w.code}/Stock`, `${w.code}/Receiving`],
+      };
+      if (idx !== -1) fallbackWarehouses[idx] = updated;
+      return updated;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackWarehouses.findIndex((wh) => wh.id === id);
+  if (idx !== -1) {
+    fallbackWarehouses[idx] = {
+      ...fallbackWarehouses[idx],
+      code: codeFormatted,
+      name: values.name.trim(),
+      address: values.address ? values.address.trim() : undefined,
+      isActive: values.isActive ?? fallbackWarehouses[idx].isActive,
+      locations: codeFormatted === "WH" ? ["WH/Stock", "Production Floor", "Packaging Zone"] : [`${codeFormatted}/Stock`, `${codeFormatted}/Receiving`],
+    };
+    return fallbackWarehouses[idx];
+  }
+
+  return null;
+}
+
+export async function toggleWarehouseStatusById(id: string): Promise<WarehouseRow | null> {
+  const wh = fallbackWarehouses.find((w) => w.id === id);
+  const newStatus = wh ? !wh.isActive : false;
+
+  try {
+    const rows = await db
+      .update(warehouses)
+      .set({ isActive: newStatus })
+      .where(eq(warehouses.id, id))
+      .returning();
+
+    if (rows.length > 0) {
+      const idx = fallbackWarehouses.findIndex((w) => w.id === id);
+      if (idx !== -1) fallbackWarehouses[idx].isActive = newStatus;
+      return {
+        id: rows[0].id,
+        code: rows[0].code,
+        name: rows[0].name,
+        address: rows[0].address || undefined,
+        isActive: rows[0].isActive,
+        locations: rows[0].code === "WH" ? ["WH/Stock", "Production Floor", "Packaging Zone"] : [`${rows[0].code}/Stock`, `${rows[0].code}/Receiving`],
+      };
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackWarehouses.findIndex((w) => w.id === id);
+  if (idx !== -1) {
+    fallbackWarehouses[idx].isActive = !fallbackWarehouses[idx].isActive;
+    return fallbackWarehouses[idx];
+  }
+
+  return null;
+}
+
 
 
 

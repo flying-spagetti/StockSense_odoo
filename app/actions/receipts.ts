@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   insertReceipt,
+  updateReceiptById,
   validateReceiptById,
   cancelReceiptById,
 } from "@/lib/db/queries";
@@ -70,3 +71,46 @@ export async function cancelReceiptAction(
 
   return { success: false, message: "Failed to cancel receipt." };
 }
+
+export async function updateReceipt(
+  _prevState: ReceiptFormState,
+  formData: FormData,
+): Promise<ReceiptFormState> {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) {
+    return { errors: { form: "Missing receipt ID for update." } };
+  }
+
+  const result = parseReceiptForm(formData);
+
+  if ("errors" in result) {
+    return { errors: result.errors };
+  }
+
+  try {
+    const updated = await updateReceiptById(id, result.data);
+
+    if (!updated) {
+      return { errors: { form: "Draft receipt not found or not in draft status." } };
+    }
+
+    revalidatePath("/receipts");
+    revalidatePath("/products");
+    revalidatePath("/");
+    revalidatePath("/move-history");
+
+    const statusLabel = result.data.status === "done" ? "validated (Stock increased)" : "updated as Draft";
+
+    return {
+      success: true,
+      message: `Receipt ${result.data.reference} successfully ${statusLabel}.`,
+      receiptId: updated.id,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      return { errors: { form: error.message } };
+    }
+    return { errors: { form: "Failed to update receipt." } };
+  }
+}
+

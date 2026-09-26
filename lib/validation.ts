@@ -396,4 +396,58 @@ export function parseAdjustmentForm(formData: FormData): AdjustmentFormResult {
   };
 }
 
+export type WarehouseFormState = {
+  errors?: Record<string, string>;
+  success?: boolean;
+  message?: string;
+  warehouseId?: string;
+};
+
+export type WarehouseInput = {
+  code: string;
+  name: string;
+  address?: string;
+};
+
+export type WarehouseFormResult =
+  | { data: WarehouseInput }
+  | { errors: Record<string, string> };
+
+export function parseWarehouseForm(formData: FormData): WarehouseFormResult {
+  const errors: Record<string, string> = {};
+
+  const code = readText(formData, "code");
+  const name = readText(formData, "name");
+  const address = readText(formData, "address");
+
+  if (!code) {
+    errors.code = "Short code is required.";
+  } else if (code.length > 10) {
+    errors.code = "Short code must be 10 characters or fewer.";
+  }
+
+  if (!name) {
+    errors.name = "Warehouse name is required.";
+  } else if (name.length > 128) {
+    errors.name = "Name must be 128 characters or fewer.";
+  }
+
+  if (address.length > 256) {
+    errors.address = "Address must be 256 characters or fewer.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  return {
+    data: {
+      code,
+      name,
+      address: address || undefined,
+    },
+  };
+}
+
+
 

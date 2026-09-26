@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useActionState, useEffect, useState, useMemo } from "react";
-import { createTransfer } from "@/app/actions/transfers";
+import { createTransfer, updateTransfer } from "@/app/actions/transfers";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, TransfersIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, TransferDetailRow } from "@/lib/db/queries";
 import type { TransferFormState } from "@/lib/validation";
 
 interface TransferFormModalProps {
@@ -15,6 +15,7 @@ interface TransferFormModalProps {
   products: ProductRow[];
   inventory: InventoryRow[];
   defaultReference: string;
+  transferToEdit?: TransferDetailRow | null;
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -26,16 +27,34 @@ export function TransferFormModal({
   products,
   inventory,
   defaultReference,
+  transferToEdit,
   onSuccessToast,
 }: TransferFormModalProps) {
-  const [state, formAction, isPending] = useActionState(createTransfer, initialState);
+  const isEditing = Boolean(transferToEdit);
+  const actionToUse = isEditing ? updateTransfer : createTransfer;
+  const [state, formAction, isPending] = useActionState(actionToUse, initialState);
   const [actionType, setActionType] = useState<"draft" | "validate">("draft");
+
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(20);
   const [fromLocationId, setFromLocationId] = useState<string>("Main Warehouse");
   const [toLocationId, setToLocationId] = useState<string>("Production Floor");
 
   const errors = state?.errors ?? {};
+
+  useEffect(() => {
+    if (transferToEdit) {
+      setSelectedProductId(transferToEdit.productId);
+      setQuantity(transferToEdit.quantity);
+      setFromLocationId(transferToEdit.fromLocationId || "Main Warehouse");
+      setToLocationId(transferToEdit.toLocationId || "Production Floor");
+    } else if (products.length > 0) {
+      setSelectedProductId(products[0].id);
+      setQuantity(20);
+      setFromLocationId("Main Warehouse");
+      setToLocationId("Production Floor");
+    }
+  }, [transferToEdit, products]);
 
   // Calculate live available stock for selected product
   const availableStock = useMemo(() => {
@@ -52,12 +71,6 @@ export function TransferFormModal({
   const isInsufficient = selectedProductId ? quantity > availableStock : false;
 
   useEffect(() => {
-    if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
-    }
-  }, [products, selectedProductId]);
-
-  useEffect(() => {
     if (state?.success && state.message) {
       onSuccessToast(state.message);
       onClose();
@@ -68,6 +81,9 @@ export function TransferFormModal({
 
   if (!isOpen) return null;
 
+  const currentRef = transferToEdit ? transferToEdit.reference : defaultReference;
+  const currentNote = transferToEdit ? (transferToEdit.note || "") : "";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
@@ -75,10 +91,12 @@ export function TransferFormModal({
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <TransfersIcon className="h-5 w-5 text-indigo-400" />
-              New Internal Transfer
+              {isEditing ? `Edit Draft Transfer (${currentRef})` : "New Internal Transfer"}
             </h2>
             <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              Move inventory between internal warehouses or operational zones.
+              {isEditing
+                ? "Modify draft transfer details before validation."
+                : "Move inventory between internal warehouses or operational zones."}
             </p>
           </div>
           <button
@@ -91,7 +109,9 @@ export function TransferFormModal({
         </div>
 
         <form action={formAction} className="grid gap-4">
+          {isEditing && <input type="hidden" name="id" value={transferToEdit!.id} />}
           <input type="hidden" name="actionType" value={actionType} />
+          {isEditing && <input type="hidden" name="reference" value={currentRef} />}
 
           {/* Form Error Banner */}
           {errors.form ? (
@@ -106,13 +126,21 @@ export function TransferFormModal({
 
           {/* Reference & Product */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Reference" htmlFor="reference" error={errors.reference} hint="Auto-generated">
+            <Field
+              label="Reference"
+              htmlFor="reference"
+              error={errors.reference}
+              hint={isEditing ? "Reference locked" : "Auto-generated"}
+            >
               <Input
                 id="reference"
                 name="reference"
-                defaultValue={defaultReference}
+                defaultValue={currentRef}
                 placeholder="WH/TR/0001"
+                readOnly={isEditing}
+                disabled={isEditing}
                 required
+                className={isEditing ? "bg-zinc-900 text-zinc-400 cursor-not-allowed border-zinc-800" : ""}
               />
             </Field>
 
@@ -217,6 +245,7 @@ export function TransferFormModal({
               id="note"
               name="note"
               rows={2}
+              defaultValue={currentNote}
               placeholder="e.g. Relocating stock to Production Floor for assembly line batch 5"
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder:text-zinc-500 font-sans"
             />
@@ -231,7 +260,7 @@ export function TransferFormModal({
               onClick={() => setActionType("draft")}
               className="w-full sm:w-auto"
             >
-              Save Draft
+              {isEditing ? "Update Draft" : "Save Draft"}
             </Button>
             <Button
               type="submit"

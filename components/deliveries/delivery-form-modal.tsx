@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useActionState, useEffect, useState, useMemo } from "react";
-import { createDelivery } from "@/app/actions/deliveries";
+import { createDelivery, updateDelivery } from "@/app/actions/deliveries";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, DeliveryDetailRow } from "@/lib/db/queries";
 import type { DeliveryFormState } from "@/lib/validation";
 
 interface DeliveryFormModalProps {
@@ -15,6 +15,7 @@ interface DeliveryFormModalProps {
   products: ProductRow[];
   inventory: InventoryRow[];
   defaultReference: string;
+  deliveryToEdit?: DeliveryDetailRow | null;
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -26,15 +27,31 @@ export function DeliveryFormModal({
   products,
   inventory,
   defaultReference,
+  deliveryToEdit,
   onSuccessToast,
 }: DeliveryFormModalProps) {
-  const [state, formAction, isPending] = useActionState(createDelivery, initialState);
+  const isEditing = Boolean(deliveryToEdit);
+  const actionToUse = isEditing ? updateDelivery : createDelivery;
+  const [state, formAction, isPending] = useActionState(actionToUse, initialState);
   const [actionType, setActionType] = useState<"draft" | "validate">("draft");
+
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(10);
   const [fromLocationId, setFromLocationId] = useState<string>("WH/Stock");
 
   const errors = state?.errors ?? {};
+
+  useEffect(() => {
+    if (deliveryToEdit) {
+      setSelectedProductId(deliveryToEdit.productId);
+      setQuantity(deliveryToEdit.quantity);
+      setFromLocationId(deliveryToEdit.fromLocationId || "WH/Stock");
+    } else if (products.length > 0) {
+      setSelectedProductId(products[0].id);
+      setQuantity(10);
+      setFromLocationId("WH/Stock");
+    }
+  }, [deliveryToEdit, products]);
 
   // Calculate live available stock for selected product
   const availableStock = useMemo(() => {
@@ -44,12 +61,6 @@ export function DeliveryFormModal({
   }, [inventory, selectedProductId]);
 
   const isInsufficient = selectedProductId ? quantity > availableStock : false;
-
-  useEffect(() => {
-    if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
-    }
-  }, [products, selectedProductId]);
 
   useEffect(() => {
     if (state?.success && state.message) {
@@ -62,16 +73,22 @@ export function DeliveryFormModal({
 
   if (!isOpen) return null;
 
+  const currentRef = deliveryToEdit ? deliveryToEdit.reference : defaultReference;
+  const currentCustomer = deliveryToEdit ? deliveryToEdit.customer : "Apex Logistics";
+  const currentNote = deliveryToEdit ? (deliveryToEdit.note || "") : "";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              New Delivery Order (Outgoing)
+              {isEditing ? `Edit Draft Delivery (${currentRef})` : "New Delivery Order (Outgoing)"}
             </h2>
             <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              Fulfill customer sales order and issue stock from warehouse.
+              {isEditing
+                ? "Modify draft delivery order details before validation."
+                : "Fulfill customer sales order and issue stock from warehouse."}
             </p>
           </div>
           <button
@@ -84,7 +101,9 @@ export function DeliveryFormModal({
         </div>
 
         <form action={formAction} className="grid gap-4">
+          {isEditing && <input type="hidden" name="id" value={deliveryToEdit!.id} />}
           <input type="hidden" name="actionType" value={actionType} />
+          {isEditing && <input type="hidden" name="reference" value={currentRef} />}
 
           {/* Form Error Banner */}
           {errors.form ? (
@@ -99,13 +118,21 @@ export function DeliveryFormModal({
 
           {/* Reference & Customer */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Reference" htmlFor="reference" error={errors.reference} hint="Auto-generated">
+            <Field
+              label="Reference"
+              htmlFor="reference"
+              error={errors.reference}
+              hint={isEditing ? "Reference locked" : "Auto-generated"}
+            >
               <Input
                 id="reference"
                 name="reference"
-                defaultValue={defaultReference}
+                defaultValue={currentRef}
                 placeholder="WH/OUT/0001"
+                readOnly={isEditing}
+                disabled={isEditing}
                 required
+                className={isEditing ? "bg-zinc-900 text-zinc-400 cursor-not-allowed border-zinc-800" : ""}
               />
             </Field>
 
@@ -113,7 +140,7 @@ export function DeliveryFormModal({
               <Input
                 id="customer"
                 name="customer"
-                defaultValue="Apex Logistics"
+                defaultValue={currentCustomer}
                 placeholder="e.g. Apex Corp"
                 required
               />
@@ -201,6 +228,7 @@ export function DeliveryFormModal({
               id="note"
               name="note"
               rows={2}
+              defaultValue={currentNote}
               placeholder="e.g. Expedited courier dispatch, Dock 4"
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 placeholder:text-zinc-500 font-sans"
             />
@@ -215,7 +243,7 @@ export function DeliveryFormModal({
               onClick={() => setActionType("draft")}
               className="w-full sm:w-auto"
             >
-              Save Draft
+              {isEditing ? "Update Draft" : "Save Draft"}
             </Button>
             <Button
               type="submit"

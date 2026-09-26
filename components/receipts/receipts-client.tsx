@@ -11,6 +11,7 @@ import {
   ReceiptsIcon,
   CheckCircleIcon,
   XIcon,
+  EditIcon,
 } from "@/components/ui/icons";
 import type { ReceiptDetailRow, ProductRow } from "@/lib/db/queries";
 
@@ -27,11 +28,18 @@ export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsCl
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const [editingReceipt, setEditingReceipt] = useState<ReceiptDetailRow | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 4500);
+  };
+
+  const handleEdit = (receipt: ReceiptDetailRow) => {
+    setEditingReceipt(receipt);
+    setIsModalOpen(true);
   };
 
   const handleValidate = (id: string, reference: string) => {
@@ -126,7 +134,10 @@ export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsCl
         </div>
 
         <Button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingReceipt(null);
+            setIsModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2"
         >
           <PlusIcon className="h-4 w-4" />
@@ -313,6 +324,14 @@ export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsCl
                           <>
                             <button
                               disabled={isPending}
+                              onClick={() => handleEdit(receipt)}
+                              className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50"
+                            >
+                              <EditIcon className="h-3.5 w-3.5" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              disabled={isPending}
                               onClick={() => handleValidate(receipt.id, receipt.reference)}
                               className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500 transition disabled:opacity-50"
                             >
@@ -354,12 +373,16 @@ export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsCl
         </div>
       </div>
 
-      {/* New Receipt Modal */}
+      {/* Receipt Form Modal */}
       <ReceiptFormModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingReceipt(null);
+        }}
         products={products}
         defaultReference={nextReference}
+        receiptToEdit={editingReceipt}
         onSuccessToast={showToast}
       />
     </div>

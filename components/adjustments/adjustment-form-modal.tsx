@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useActionState, useEffect, useState, useMemo } from "react";
-import { createAdjustment } from "@/app/actions/adjustments";
+import { createAdjustment, updateAdjustment } from "@/app/actions/adjustments";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, AdjustmentsIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, AdjustmentDetailRow } from "@/lib/db/queries";
 import type { AdjustmentFormState } from "@/lib/validation";
 
 interface AdjustmentFormModalProps {
@@ -15,6 +15,7 @@ interface AdjustmentFormModalProps {
   products: ProductRow[];
   inventory: InventoryRow[];
   defaultReference: string;
+  adjustmentToEdit?: AdjustmentDetailRow | null;
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -26,15 +27,32 @@ export function AdjustmentFormModal({
   products,
   inventory,
   defaultReference,
+  adjustmentToEdit,
   onSuccessToast,
 }: AdjustmentFormModalProps) {
-  const [state, formAction, isPending] = useActionState(createAdjustment, initialState);
+  const isEditing = Boolean(adjustmentToEdit);
+  const actionToUse = isEditing ? updateAdjustment : createAdjustment;
+  const [state, formAction, isPending] = useActionState(actionToUse, initialState);
   const [actionType, setActionType] = useState<"draft" | "validate">("draft");
+
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [locationId, setLocationId] = useState<string>("WH/Stock");
   const [physicalCount, setPhysicalCount] = useState<number>(0);
 
   const errors = state?.errors ?? {};
+
+  useEffect(() => {
+    if (adjustmentToEdit) {
+      setSelectedProductId(adjustmentToEdit.productId);
+      setLocationId(adjustmentToEdit.locationId || "WH/Stock");
+      setPhysicalCount(adjustmentToEdit.physicalCount);
+    } else if (products.length > 0) {
+      setSelectedProductId(products[0].id);
+      setLocationId("WH/Stock");
+      const firstItem = inventory.find((inv) => inv.id === products[0].id);
+      setPhysicalCount(firstItem ? firstItem.onHand + 5 : 10);
+    }
+  }, [adjustmentToEdit, products, inventory]);
 
   // Calculate live recorded stock for selected product
   const recordedStock = useMemo(() => {
@@ -43,21 +61,13 @@ export function AdjustmentFormModal({
     return item ? item.onHand : 0;
   }, [inventory, selectedProductId]);
 
-  // Set default physical count when product changes
-  useEffect(() => {
-    if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].id);
-      const firstItem = inventory.find((inv) => inv.id === products[0].id);
-      setPhysicalCount(firstItem ? firstItem.onHand + 5 : 10);
-    }
-  }, [products, inventory, selectedProductId]);
-
-  // When product changes, update physical count to recorded + 5 by default for demo ease
   const handleProductChange = (prodId: string) => {
     setSelectedProductId(prodId);
-    const item = inventory.find((inv) => inv.id === prodId);
-    const rec = item ? item.onHand : 0;
-    setPhysicalCount(rec + 5);
+    if (!adjustmentToEdit) {
+      const item = inventory.find((inv) => inv.id === prodId);
+      const rec = item ? item.onHand : 0;
+      setPhysicalCount(rec + 5);
+    }
   };
 
   const delta = physicalCount - recordedStock;
@@ -74,6 +84,9 @@ export function AdjustmentFormModal({
 
   if (!isOpen) return null;
 
+  const currentRef = adjustmentToEdit ? adjustmentToEdit.reference : defaultReference;
+  const currentNote = adjustmentToEdit ? (adjustmentToEdit.note || "") : "";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
@@ -81,10 +94,12 @@ export function AdjustmentFormModal({
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <AdjustmentsIcon className="h-5 w-5 text-amber-400" />
-              New Stock Adjustment
+              {isEditing ? `Edit Draft Adjustment (${currentRef})` : "New Stock Adjustment"}
             </h2>
             <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              Reconcile physical inventory count against system recorded stock.
+              {isEditing
+                ? "Modify draft physical inventory count before posting."
+                : "Reconcile physical inventory count against system recorded stock."}
             </p>
           </div>
           <button
@@ -97,8 +112,10 @@ export function AdjustmentFormModal({
         </div>
 
         <form action={formAction} className="grid gap-4">
+          {isEditing && <input type="hidden" name="id" value={adjustmentToEdit!.id} />}
           <input type="hidden" name="actionType" value={actionType} />
           <input type="hidden" name="recordedStock" value={recordedStock} />
+          {isEditing && <input type="hidden" name="reference" value={currentRef} />}
 
           {/* Form Error Banner */}
           {errors.form ? (
@@ -113,13 +130,21 @@ export function AdjustmentFormModal({
 
           {/* Reference & Location */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Reference" htmlFor="reference" error={errors.reference} hint="Auto-generated">
+            <Field
+              label="Reference"
+              htmlFor="reference"
+              error={errors.reference}
+              hint={isEditing ? "Reference locked" : "Auto-generated"}
+            >
               <Input
                 id="reference"
                 name="reference"
-                defaultValue={defaultReference}
+                defaultValue={currentRef}
                 placeholder="WH/ADJ/0001"
+                readOnly={isEditing}
+                disabled={isEditing}
                 required
+                className={isEditing ? "bg-zinc-900 text-zinc-400 cursor-not-allowed border-zinc-800" : ""}
               />
             </Field>
 
@@ -219,6 +244,7 @@ export function AdjustmentFormModal({
               id="note"
               name="note"
               rows={2}
+              defaultValue={currentNote}
               placeholder="e.g. Annual stock count reconciliation, damaged box discard"
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 placeholder:text-zinc-500 font-sans"
             />
@@ -233,7 +259,7 @@ export function AdjustmentFormModal({
               onClick={() => setActionType("draft")}
               className="w-full sm:w-auto"
             >
-              Save Draft
+              {isEditing ? "Update Draft" : "Save Draft"}
             </Button>
             <Button
               type="submit"

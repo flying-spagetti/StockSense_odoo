@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   insertDelivery,
+  updateDeliveryById,
   validateDeliveryById,
   cancelDeliveryById,
 } from "@/lib/db/queries";
@@ -89,3 +90,56 @@ export async function cancelDeliveryAction(
 
   return { success: false, message: "Failed to cancel delivery order." };
 }
+
+export async function updateDelivery(
+  _prevState: DeliveryFormState,
+  formData: FormData,
+): Promise<DeliveryFormState> {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) {
+    return { errors: { form: "Missing delivery ID for update." } };
+  }
+
+  const result = parseDeliveryForm(formData);
+
+  if ("errors" in result) {
+    return { errors: result.errors };
+  }
+
+  try {
+    const updated = await updateDeliveryById(id, result.data);
+
+    if (!updated) {
+      return { errors: { form: "Draft delivery not found or not in draft status." } };
+    }
+
+    revalidatePath("/deliveries");
+    revalidatePath("/products");
+    revalidatePath("/");
+    revalidatePath("/move-history");
+
+    const statusLabel =
+      result.data.status === "done"
+        ? "validated (Derived stock decreased)"
+        : "updated as Draft";
+
+    return {
+      success: true,
+      message: `Delivery ${result.data.reference} successfully ${statusLabel}.`,
+      deliveryId: updated.id,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Insufficient available stock at")) {
+      return {
+        success: false,
+        errors: { form: error.message },
+        message: error.message,
+      };
+    }
+    if (error instanceof Error) {
+      return { errors: { form: error.message } };
+    }
+    return { errors: { form: "Failed to update delivery order." } };
+  }
+}
+
