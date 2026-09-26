@@ -12,8 +12,8 @@ import {
   AlertTriangleIcon,
   MoveHistoryIcon,
   CheckCircleIcon,
+  ArrowRightIcon,
 } from "@/components/ui/icons";
-import { ArrowRightIcon, HugeiconsIcon } from "@hugeicons/core-free-icons";
 
 export const dynamic = "force-dynamic";
 
@@ -188,7 +188,7 @@ export default async function DashboardPage() {
               className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-mono font-semibold text-amber-300 hover:bg-amber-500/20 hover:text-white transition"
             >
               <span>Open deliveries</span>
-              <HugeiconsIcon icon={ArrowRightIcon} className="h-4 w-4" />
+              <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
         </div>
