@@ -25,6 +25,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
+  { href: "/operations", label: "Operations", icon: PackageIcon },
   { href: "/products", label: "Products", icon: ProductsIcon },
   { href: "/receipts", label: "Receipts", icon: ReceiptsIcon },
   { href: "/deliveries", label: "Deliveries", icon: DeliveriesIcon },
@@ -50,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const getPageTitle = () => {
     if (pathname === "/" || pathname === "/dashboard") return "Dashboard Overview";
+    if (pathname.startsWith("/operations")) return "Operations Workspace";
     if (pathname.startsWith("/products")) return "Product Master Catalog";
     if (pathname.startsWith("/receipts")) return "Stock Receipts (Incoming)";
     if (pathname.startsWith("/deliveries")) return "Stock Deliveries (Outgoing)";
