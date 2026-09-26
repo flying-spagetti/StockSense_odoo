@@ -14,13 +14,15 @@ import {
   AlertTriangleIcon,
   EditIcon,
 } from "@/components/ui/icons";
-import type { DeliveryDetailRow, ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { DeliveryDetailRow, ProductRow, InventoryRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 
 interface DeliveriesClientProps {
   deliveries: DeliveryDetailRow[];
   products: ProductRow[];
   inventory: InventoryRow[];
   nextReference: string;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
 }
 
 export function DeliveriesClient({
@@ -28,6 +30,8 @@ export function DeliveriesClient({
   products,
   inventory,
   nextReference,
+  warehouses = [],
+  movements = [],
 }: DeliveriesClientProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -448,6 +452,8 @@ export function DeliveriesClient({
         inventory={inventory}
         defaultReference={nextReference}
         deliveryToEdit={editingDelivery}
+        warehouses={warehouses}
+        movements={movements}
         onSuccessToast={showToast}
       />
     </div>

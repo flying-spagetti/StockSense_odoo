@@ -14,13 +14,15 @@ import {
   AlertTriangleIcon,
   EditIcon,
 } from "@/components/ui/icons";
-import type { TransferDetailRow, ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { TransferDetailRow, ProductRow, InventoryRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 
 interface TransfersClientProps {
   transfers: TransferDetailRow[];
   products: ProductRow[];
   inventory: InventoryRow[];
   nextReference: string;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
 }
 
 export function TransfersClient({
@@ -28,6 +30,8 @@ export function TransfersClient({
   products,
   inventory,
   nextReference,
+  warehouses = [],
+  movements = [],
 }: TransfersClientProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -429,6 +433,8 @@ export function TransfersClient({
         inventory={inventory}
         defaultReference={nextReference}
         transferToEdit={editingTransfer}
+        warehouses={warehouses}
+        movements={movements}
         onSuccessToast={showToast}
       />
     </div>

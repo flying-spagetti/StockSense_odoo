@@ -1,5 +1,6 @@
 export type ProductFormState = {
   errors?: Record<string, string>;
+  success?: boolean;
   message?: string;
 };
 

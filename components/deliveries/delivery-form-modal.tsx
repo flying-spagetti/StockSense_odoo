@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow, DeliveryDetailRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, DeliveryDetailRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 import type { DeliveryFormState } from "@/lib/validation";
 
 interface DeliveryFormModalProps {
@@ -16,6 +16,8 @@ interface DeliveryFormModalProps {
   inventory: InventoryRow[];
   defaultReference: string;
   deliveryToEdit?: DeliveryDetailRow | null;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -28,6 +30,8 @@ export function DeliveryFormModal({
   inventory,
   defaultReference,
   deliveryToEdit,
+  warehouses = [],
+  movements = [],
   onSuccessToast,
 }: DeliveryFormModalProps) {
   const isEditing = Boolean(deliveryToEdit);
@@ -53,21 +57,83 @@ export function DeliveryFormModal({
     }
   }, [deliveryToEdit, products]);
 
-  // Calculate live available stock for selected product
-  const availableStock = useMemo(() => {
-    if (!selectedProductId) return 0;
-    const item = inventory.find((inv) => inv.id === selectedProductId);
-    return item ? item.onHand : 0;
-  }, [inventory, selectedProductId]);
+  // Extract all active locations across warehouses
+  const allLocations = useMemo(() => {
+    const locs: { id: string; label: string; warehouseName: string }[] = [];
+    warehouses.forEach((wh) => {
+      if (wh.isActive) {
+        wh.locations.forEach((loc) => {
+          locs.push({
+            id: loc,
+            label: `${loc} (${wh.name})`,
+            warehouseName: wh.name,
+          });
+        });
+      }
+    });
 
-  const isInsufficient = selectedProductId ? quantity > availableStock : false;
+    if (locs.length === 0) {
+      return [
+        { id: "WH/Stock", label: "WH/Stock (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Production Floor", label: "Production Floor (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Packaging Zone", label: "Packaging Zone (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "SF/Stock", label: "SF/Stock (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+        { id: "SF/Receiving", label: "SF/Receiving (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+      ];
+    }
+
+    return locs;
+  }, [warehouses]);
+
+  // Calculate live available stock per location for selected product
+  const warehouseStockBreakdown = useMemo(() => {
+    if (!selectedProductId) return [];
+
+    const doneMoves = movements.filter(
+      (m) => m.productId === selectedProductId && m.status === "done"
+    );
+
+    return allLocations.map((loc) => {
+      const stock = doneMoves.reduce((acc, m) => {
+        if (m.toLocationId === loc.id) return acc + m.quantity;
+        if (m.fromLocationId === loc.id) return acc - m.quantity;
+        return acc;
+      }, 0);
+
+      return {
+        locationId: loc.id,
+        warehouseName: loc.warehouseName,
+        onHand: Math.max(0, stock),
+      };
+    });
+  }, [selectedProductId, movements, allLocations]);
+
+  // Currently selected product
+  const selectedProduct = useMemo(() => {
+    return products.find((p) => p.id === selectedProductId);
+  }, [products, selectedProductId]);
+
+  // Currently selected location stock
+  const selectedSourceStock = useMemo(() => {
+    const locItem = warehouseStockBreakdown.find((b) => b.locationId === fromLocationId);
+    if (locItem) return locItem.onHand;
+    const invItem = inventory.find((i) => i.id === selectedProductId);
+    return invItem ? invItem.onHand : 0;
+  }, [warehouseStockBreakdown, fromLocationId, inventory, selectedProductId]);
+
+  const isInsufficient = selectedProductId ? quantity > selectedSourceStock : false;
+
+  const handledStateRef = React.useRef(state);
 
   useEffect(() => {
-    if (state?.success && state.message) {
-      onSuccessToast(state.message);
-      onClose();
-    } else if (state && !state.success && state.message) {
-      onSuccessToast(state.message, true);
+    if (state && state !== handledStateRef.current) {
+      handledStateRef.current = state;
+      if (state.success && state.message) {
+        onSuccessToast(state.message);
+        onClose();
+      } else if (!state.success && state.message) {
+        onSuccessToast(state.message, true);
+      }
     }
   }, [state, onSuccessToast, onClose]);
 
@@ -79,7 +145,7 @@ export function DeliveryFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
+      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
@@ -162,31 +228,41 @@ export function DeliveryFormModal({
                 const stock = invItem ? invItem.onHand : 0;
                 return (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.sku}) — Available: {stock} {p.unit}
+                    {p.name} ({p.sku}) — Total Stock: {stock} {p.unit}
                   </option>
                 );
               })}
             </select>
           </Field>
 
-          {/* Source Location & Quantity */}
+          {/* Source Location Dropdown & Quantity */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Source Location" htmlFor="fromLocationId" error={errors.fromLocationId}>
-              <Input
+              <select
                 id="fromLocationId"
                 name="fromLocationId"
                 value={fromLocationId}
                 onChange={(e) => setFromLocationId(e.target.value)}
-                placeholder="WH/Stock"
                 required
-              />
+                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
+              >
+                {allLocations.map((loc) => {
+                  const stockItem = warehouseStockBreakdown.find((b) => b.locationId === loc.id);
+                  const stock = stockItem ? stockItem.onHand : 0;
+                  return (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.id} — {loc.warehouseName} ({stock} {selectedProduct?.unit || 'pcs'})
+                    </option>
+                  );
+                })}
+              </select>
             </Field>
 
             <Field
               label="Quantity"
               htmlFor="quantity"
               error={errors.quantity}
-              hint={`Avail: ${availableStock} pcs`}
+              hint={`Avail at ${fromLocationId}: ${selectedSourceStock} ${selectedProduct?.unit || 'pcs'}`}
             >
               <Input
                 id="quantity"
@@ -203,21 +279,59 @@ export function DeliveryFormModal({
             </Field>
           </div>
 
-          {/* Availability Indicator & Warning Badge */}
-          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs flex items-center justify-between">
-            <span className="text-zinc-400">
-              Source Availability at <span className="text-zinc-200">{fromLocationId || "WH/Stock"}</span>:
-            </span>
-            <span className={`font-bold ${availableStock > 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {availableStock} pcs
-            </span>
-          </div>
+          {/* Warehouse Stock Breakdown Panel */}
+          {selectedProductId && warehouseStockBreakdown.length > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2 text-xs font-mono">
+                <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  Stock Availability Across All Warehouses
+                </span>
+                <span className="text-zinc-400">
+                  Total: <strong className="text-emerald-400">{warehouseStockBreakdown.reduce((sum, b) => sum + b.onHand, 0)} {selectedProduct?.unit || "pcs"}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                {warehouseStockBreakdown.map((item) => {
+                  const isSelected = item.locationId === fromLocationId;
+                  return (
+                    <div
+                      key={item.locationId}
+                      onClick={() => setFromLocationId(item.locationId)}
+                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer transition ${
+                        isSelected
+                          ? "bg-amber-500/10 border-amber-500/50 text-amber-200"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-bold text-zinc-200 block truncate">{item.locationId}</span>
+                        <span className="text-[10px] text-zinc-500 block truncate">{item.warehouseName}</span>
+                      </div>
+                      <span
+                        className={`font-bold shrink-0 px-2 py-0.5 rounded text-[11px] ${
+                          item.onHand > 0
+                            ? isSelected
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-zinc-900 text-zinc-600 border border-zinc-800"
+                        }`}
+                      >
+                        {item.onHand} {selectedProduct?.unit || "pcs"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {isInsufficient && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300 font-mono flex items-center gap-2">
               <AlertTriangleIcon className="h-4 w-4 text-amber-400 shrink-0" />
               <span>
-                Warning: Requested {quantity} pcs exceeds current stock ({availableStock} pcs). Validation will be rejected server-side.
+                Warning: Requested {quantity} {selectedProduct?.unit || 'pcs'} exceeds stock at {fromLocationId} ({selectedSourceStock} {selectedProduct?.unit || 'pcs'}). Validation will be rejected server-side.
               </span>
             </div>
           )}

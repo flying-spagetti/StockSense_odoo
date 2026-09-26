@@ -34,7 +34,7 @@ export async function createProduct(
   }
 
   revalidatePath("/products");
-  redirect("/products");
+  return { success: true, message: "Product created successfully." };
 }
 
 export async function updateProduct(
@@ -62,5 +62,5 @@ export async function updateProduct(
   }
 
   revalidatePath("/products");
-  redirect("/products");
+  return { success: true, message: "Product updated successfully." };
 }

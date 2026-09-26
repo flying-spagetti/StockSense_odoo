@@ -13,15 +13,25 @@ import {
   XIcon,
   EditIcon,
 } from "@/components/ui/icons";
-import type { ReceiptDetailRow, ProductRow } from "@/lib/db/queries";
+import type { ReceiptDetailRow, ProductRow, InventoryRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 
 interface ReceiptsClientProps {
   receipts: ReceiptDetailRow[];
   products: ProductRow[];
+  inventory?: InventoryRow[];
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
   nextReference: string;
 }
 
-export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsClientProps) {
+export function ReceiptsClient({
+  receipts,
+  products,
+  inventory = [],
+  warehouses = [],
+  movements = [],
+  nextReference,
+}: ReceiptsClientProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -381,6 +391,9 @@ export function ReceiptsClient({ receipts, products, nextReference }: ReceiptsCl
           setEditingReceipt(null);
         }}
         products={products}
+        inventory={inventory}
+        warehouses={warehouses}
+        movements={movements}
         defaultReference={nextReference}
         receiptToEdit={editingReceipt}
         onSuccessToast={showToast}

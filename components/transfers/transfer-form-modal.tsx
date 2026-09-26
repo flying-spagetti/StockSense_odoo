@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, TransfersIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow, TransferDetailRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, TransferDetailRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 import type { TransferFormState } from "@/lib/validation";
 
 interface TransferFormModalProps {
@@ -16,6 +16,8 @@ interface TransferFormModalProps {
   inventory: InventoryRow[];
   defaultReference: string;
   transferToEdit?: TransferDetailRow | null;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -28,6 +30,8 @@ export function TransferFormModal({
   inventory,
   defaultReference,
   transferToEdit,
+  warehouses = [],
+  movements = [],
   onSuccessToast,
 }: TransferFormModalProps) {
   const isEditing = Boolean(transferToEdit);
@@ -37,7 +41,7 @@ export function TransferFormModal({
 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(20);
-  const [fromLocationId, setFromLocationId] = useState<string>("Main Warehouse");
+  const [fromLocationId, setFromLocationId] = useState<string>("WH/Stock");
   const [toLocationId, setToLocationId] = useState<string>("Production Floor");
 
   const errors = state?.errors ?? {};
@@ -46,29 +50,84 @@ export function TransferFormModal({
     if (transferToEdit) {
       setSelectedProductId(transferToEdit.productId);
       setQuantity(transferToEdit.quantity);
-      setFromLocationId(transferToEdit.fromLocationId || "Main Warehouse");
+      setFromLocationId(transferToEdit.fromLocationId || "WH/Stock");
       setToLocationId(transferToEdit.toLocationId || "Production Floor");
-    } else if (products.length > 0) {
+    } else if (products.length > 0 && !selectedProductId) {
       setSelectedProductId(products[0].id);
       setQuantity(20);
-      setFromLocationId("Main Warehouse");
+      setFromLocationId("WH/Stock");
       setToLocationId("Production Floor");
     }
-  }, [transferToEdit, products]);
+  }, [transferToEdit, products, selectedProductId]);
 
-  // Calculate live available stock for selected product
-  const availableStock = useMemo(() => {
-    if (!selectedProductId) return 0;
-    const item = inventory.find((inv) => inv.id === selectedProductId);
-    return item ? item.onHand : 0;
-  }, [inventory, selectedProductId]);
+  // Extract all active locations across warehouses
+  const allLocations = useMemo(() => {
+    const locs: { id: string; label: string; warehouseName: string }[] = [];
+    warehouses.forEach((wh) => {
+      if (wh.isActive) {
+        wh.locations.forEach((loc) => {
+          locs.push({
+            id: loc,
+            label: `${loc} (${wh.name})`,
+            warehouseName: wh.name,
+          });
+        });
+      }
+    });
+
+    if (locs.length === 0) {
+      return [
+        { id: "WH/Stock", label: "WH/Stock (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Production Floor", label: "Production Floor (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Packaging Zone", label: "Packaging Zone (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "SF/Stock", label: "SF/Stock (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+        { id: "SF/Receiving", label: "SF/Receiving (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+      ];
+    }
+
+    return locs;
+  }, [warehouses]);
+
+  // Calculate live available stock per location for selected product
+  const warehouseStockBreakdown = useMemo(() => {
+    if (!selectedProductId) return [];
+
+    const doneMoves = movements.filter(
+      (m) => m.productId === selectedProductId && m.status === "done"
+    );
+
+    return allLocations.map((loc) => {
+      const stock = doneMoves.reduce((acc, m) => {
+        if (m.toLocationId === loc.id) return acc + m.quantity;
+        if (m.fromLocationId === loc.id) return acc - m.quantity;
+        return acc;
+      }, 0);
+
+      return {
+        locationId: loc.id,
+        warehouseName: loc.warehouseName,
+        onHand: Math.max(0, stock),
+      };
+    });
+  }, [selectedProductId, movements, allLocations]);
+
+  const selectedProduct = useMemo(() => {
+    return products.find((p) => p.id === selectedProductId);
+  }, [products, selectedProductId]);
+
+  const selectedSourceStock = useMemo(() => {
+    const locItem = warehouseStockBreakdown.find((b) => b.locationId === fromLocationId);
+    if (locItem) return locItem.onHand;
+    const invItem = inventory.find((i) => i.id === selectedProductId);
+    return invItem ? invItem.onHand : 0;
+  }, [warehouseStockBreakdown, fromLocationId, inventory, selectedProductId]);
 
   const isSameLocation =
     fromLocationId.trim() !== "" &&
     toLocationId.trim() !== "" &&
     fromLocationId.trim().toLowerCase() === toLocationId.trim().toLowerCase();
 
-  const isInsufficient = selectedProductId ? quantity > availableStock : false;
+  const isInsufficient = selectedProductId ? quantity > selectedSourceStock : false;
 
   useEffect(() => {
     if (state?.success && state.message) {
@@ -86,7 +145,7 @@ export function TransferFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
+      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
@@ -151,14 +210,14 @@ export function TransferFormModal({
                 required
                 value={selectedProductId}
                 onChange={(e) => setSelectedProductId(e.target.value)}
-                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-sans"
               >
                 {products.map((p) => {
                   const invItem = inventory.find((i) => i.id === p.id);
                   const stock = invItem ? invItem.onHand : 0;
                   return (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.sku}) — Avail: {stock} {p.unit}
+                      {p.name} ({p.sku}) — Total Stock: {stock} {p.unit}
                     </option>
                   );
                 })}
@@ -166,39 +225,60 @@ export function TransferFormModal({
             </Field>
           </div>
 
-          {/* Source & Destination Locations */}
+          {/* Source & Destination Location Dropdowns */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Source Location" htmlFor="fromLocationId" error={errors.fromLocationId}>
-              <Input
+              <select
                 id="fromLocationId"
                 name="fromLocationId"
                 value={fromLocationId}
                 onChange={(e) => setFromLocationId(e.target.value)}
-                placeholder="Main Warehouse"
                 required
-              />
+                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono"
+              >
+                {allLocations.map((loc) => {
+                  const stockItem = warehouseStockBreakdown.find((b) => b.locationId === loc.id);
+                  const stock = stockItem ? stockItem.onHand : 0;
+                  return (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.id} — {loc.warehouseName} ({stock} {selectedProduct?.unit || 'pcs'})
+                    </option>
+                  );
+                })}
+              </select>
             </Field>
 
             <Field label="Destination Location" htmlFor="toLocationId" error={errors.toLocationId || (isSameLocation ? "Cannot match source" : undefined)}>
-              <Input
+              <select
                 id="toLocationId"
                 name="toLocationId"
                 value={toLocationId}
                 onChange={(e) => setToLocationId(e.target.value)}
-                placeholder="Production Floor"
-                className={isSameLocation ? "border-red-500 focus:border-red-500" : ""}
                 required
-              />
+                className={`h-9 w-full rounded-md border bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-mono ${
+                  isSameLocation ? "border-red-500 focus:border-red-500" : "border-zinc-700"
+                }`}
+              >
+                {allLocations.map((loc) => {
+                  const stockItem = warehouseStockBreakdown.find((b) => b.locationId === loc.id);
+                  const stock = stockItem ? stockItem.onHand : 0;
+                  return (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.id} — {loc.warehouseName} ({stock} {selectedProduct?.unit || 'pcs'})
+                    </option>
+                  );
+                })}
+              </select>
             </Field>
           </div>
 
-          {/* Quantity & Availability Indicator */}
+          {/* Quantity & Availability */}
           <div className="grid grid-cols-2 gap-3 items-center">
             <Field
               label="Quantity to Move"
               htmlFor="quantity"
               error={errors.quantity}
-              hint={`Source stock: ${availableStock}`}
+              hint={`Source stock: ${selectedSourceStock} ${selectedProduct?.unit || 'pcs'}`}
             >
               <Input
                 id="quantity"
@@ -215,12 +295,68 @@ export function TransferFormModal({
             </Field>
 
             <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs flex flex-col justify-center h-16 mt-1">
-              <span className="text-zinc-400">Source Availability:</span>
-              <span className={`font-bold text-sm ${availableStock > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {availableStock} pcs @ {fromLocationId || "Source"}
+              <span className="text-zinc-400">Source Stock @ {fromLocationId}:</span>
+              <span className={`font-bold text-sm ${selectedSourceStock > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {selectedSourceStock} {selectedProduct?.unit || 'pcs'}
               </span>
             </div>
           </div>
+
+          {/* Warehouse Stock Breakdown Panel */}
+          {selectedProductId && warehouseStockBreakdown.length > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2 text-xs font-mono">
+                <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-indigo-400" />
+                  Stock Availability Across All Warehouses
+                </span>
+                <span className="text-zinc-400">
+                  Total: <strong className="text-emerald-400">{warehouseStockBreakdown.reduce((sum, b) => sum + b.onHand, 0)} {selectedProduct?.unit || "pcs"}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                {warehouseStockBreakdown.map((item) => {
+                  const isSource = item.locationId === fromLocationId;
+                  const isDest = item.locationId === toLocationId;
+
+                  let borderStyle = "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700";
+                  if (isSource) borderStyle = "bg-amber-500/10 border-amber-500/50 text-amber-200";
+                  if (isDest) borderStyle = "bg-indigo-500/10 border-indigo-500/50 text-indigo-200";
+
+                  return (
+                    <div
+                      key={item.locationId}
+                      onClick={() => {
+                        if (item.locationId !== fromLocationId) {
+                          setToLocationId(item.locationId);
+                        }
+                      }}
+                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer transition ${borderStyle}`}
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-bold text-zinc-200 block truncate flex items-center gap-1">
+                          {item.locationId}
+                          {isSource && <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-amber-500/20 text-amber-300">From</span>}
+                          {isDest && <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300">To</span>}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 block truncate">{item.warehouseName}</span>
+                      </div>
+                      <span
+                        className={`font-bold shrink-0 px-2 py-0.5 rounded text-[11px] ${
+                          item.onHand > 0
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-zinc-900 text-zinc-600 border border-zinc-800"
+                        }`}
+                      >
+                        {item.onHand} {selectedProduct?.unit || "pcs"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Warning Messages */}
           {isSameLocation && (
@@ -234,7 +370,7 @@ export function TransferFormModal({
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300 font-mono flex items-center gap-2">
               <AlertTriangleIcon className="h-4 w-4 text-amber-400 shrink-0" />
               <span>
-                Warning: Requested {quantity} pcs exceeds current source stock ({availableStock} pcs). Validation will be blocked server-side.
+                Warning: Requested {quantity} {selectedProduct?.unit || 'pcs'} exceeds source stock at {fromLocationId} ({selectedSourceStock} {selectedProduct?.unit || 'pcs'}). Validation will be blocked server-side.
               </span>
             </div>
           )}

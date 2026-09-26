@@ -41,7 +41,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
           </p>
         </div>
 
-        {/* Demo Helper Banner */}
+        {/* Demo Helper Banner 
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-300 font-mono space-y-1">
           <div className="flex items-center justify-between font-bold text-amber-200">
             <span>DEMO CREDENTIALS:</span>
@@ -50,6 +50,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
           <p>Login ID: <code className="text-white font-semibold">demo_user</code></p>
           <p>Password: <code className="text-white font-semibold">Demo@123</code></p>
         </div>
+        */}
 
         {/* Reset Success Toast */}
         {isResetSuccess && (
@@ -76,8 +77,8 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                 id="identifier"
                 name="identifier"
                 type="text"
-                placeholder="demo_user or demo@stocksense.app"
-                defaultValue="demo_user"
+                placeholder="user or demo@stocksense.app"
+                defaultValue=""
                 required
                 className="bg-zinc-950 border-zinc-700 focus:border-amber-500"
               />
@@ -90,7 +91,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                 name="password"
                 type="password"
                 placeholder="••••••••"
-                defaultValue="Demo@123"
+                defaultValue="[PASSWORD]"
                 required
                 className="bg-zinc-950 border-zinc-700 focus:border-amber-500"
               />

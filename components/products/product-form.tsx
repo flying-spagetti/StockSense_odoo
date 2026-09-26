@@ -35,7 +35,7 @@ export function ProductForm({
   const errors = state?.errors ?? {};
 
   useEffect(() => {
-    if (state && !state.errors && onSuccess) {
+    if (state?.success && onSuccess) {
       onSuccess();
     }
   }, [state, onSuccess]);

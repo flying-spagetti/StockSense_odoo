@@ -3,6 +3,8 @@ import {
   listProducts,
   listInventory,
   getNextDeliveryReference,
+  listWarehouses,
+  listMoveHistory,
 } from "@/lib/db/queries";
 import { DeliveriesClient } from "@/components/deliveries/deliveries-client";
 
@@ -13,6 +15,8 @@ export default async function DeliveriesPage() {
   const products = await listProducts();
   const inventory = await listInventory();
   const nextReference = await getNextDeliveryReference();
+  const warehouses = await listWarehouses();
+  const movements = await listMoveHistory();
 
   return (
     <DeliveriesClient
@@ -20,6 +24,8 @@ export default async function DeliveriesPage() {
       products={products}
       inventory={inventory}
       nextReference={nextReference}
+      warehouses={warehouses}
+      movements={movements}
     />
   );
 }

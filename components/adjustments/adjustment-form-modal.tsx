@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, AdjustmentsIcon } from "@/components/ui/icons";
-import type { ProductRow, InventoryRow, AdjustmentDetailRow } from "@/lib/db/queries";
+import type { ProductRow, InventoryRow, AdjustmentDetailRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 import type { AdjustmentFormState } from "@/lib/validation";
 
 interface AdjustmentFormModalProps {
@@ -16,6 +16,8 @@ interface AdjustmentFormModalProps {
   inventory: InventoryRow[];
   defaultReference: string;
   adjustmentToEdit?: AdjustmentDetailRow | null;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
   onSuccessToast: (msg: string, isError?: boolean) => void;
 }
 
@@ -28,6 +30,8 @@ export function AdjustmentFormModal({
   inventory,
   defaultReference,
   adjustmentToEdit,
+  warehouses = [],
+  movements = [],
   onSuccessToast,
 }: AdjustmentFormModalProps) {
   const isEditing = Boolean(adjustmentToEdit);
@@ -41,31 +45,88 @@ export function AdjustmentFormModal({
 
   const errors = state?.errors ?? {};
 
+  // Extract all active locations across warehouses
+  const allLocations = useMemo(() => {
+    const locs: { id: string; label: string; warehouseName: string }[] = [];
+    warehouses.forEach((wh) => {
+      if (wh.isActive) {
+        wh.locations.forEach((loc) => {
+          locs.push({
+            id: loc,
+            label: `${loc} (${wh.name})`,
+            warehouseName: wh.name,
+          });
+        });
+      }
+    });
+
+    if (locs.length === 0) {
+      return [
+        { id: "WH/Stock", label: "WH/Stock (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Production Floor", label: "Production Floor (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "Packaging Zone", label: "Packaging Zone (Main Warehouse)", warehouseName: "Main Warehouse" },
+        { id: "SF/Stock", label: "SF/Stock (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+        { id: "SF/Receiving", label: "SF/Receiving (San Francisco Hub)", warehouseName: "San Francisco Hub" },
+      ];
+    }
+
+    return locs;
+  }, [warehouses]);
+
+  // Calculate live available stock per location for selected product
+  const warehouseStockBreakdown = useMemo(() => {
+    if (!selectedProductId) return [];
+
+    const doneMoves = movements.filter(
+      (m) => m.productId === selectedProductId && m.status === "done"
+    );
+
+    return allLocations.map((loc) => {
+      const stock = doneMoves.reduce((acc, m) => {
+        if (m.toLocationId === loc.id) return acc + m.quantity;
+        if (m.fromLocationId === loc.id) return acc - m.quantity;
+        return acc;
+      }, 0);
+
+      return {
+        locationId: loc.id,
+        warehouseName: loc.warehouseName,
+        onHand: Math.max(0, stock),
+      };
+    });
+  }, [selectedProductId, movements, allLocations]);
+
+  const selectedProduct = useMemo(() => {
+    return products.find((p) => p.id === selectedProductId);
+  }, [products, selectedProductId]);
+
+  // Calculate live recorded stock for selected product at selected location
+  const recordedStock = useMemo(() => {
+    if (!selectedProductId) return 0;
+    const locItem = warehouseStockBreakdown.find((b) => b.locationId === locationId);
+    if (locItem) return locItem.onHand;
+    const item = inventory.find((inv) => inv.id === selectedProductId);
+    return item ? item.onHand : 0;
+  }, [selectedProductId, locationId, warehouseStockBreakdown, inventory]);
+
   useEffect(() => {
     if (adjustmentToEdit) {
       setSelectedProductId(adjustmentToEdit.productId);
       setLocationId(adjustmentToEdit.locationId || "WH/Stock");
       setPhysicalCount(adjustmentToEdit.physicalCount);
-    } else if (products.length > 0) {
+    } else if (products.length > 0 && !selectedProductId) {
       setSelectedProductId(products[0].id);
       setLocationId("WH/Stock");
       const firstItem = inventory.find((inv) => inv.id === products[0].id);
       setPhysicalCount(firstItem ? firstItem.onHand + 5 : 10);
     }
-  }, [adjustmentToEdit, products, inventory]);
-
-  // Calculate live recorded stock for selected product
-  const recordedStock = useMemo(() => {
-    if (!selectedProductId) return 0;
-    const item = inventory.find((inv) => inv.id === selectedProductId);
-    return item ? item.onHand : 0;
-  }, [inventory, selectedProductId]);
+  }, [adjustmentToEdit, products, inventory, selectedProductId]);
 
   const handleProductChange = (prodId: string) => {
     setSelectedProductId(prodId);
     if (!adjustmentToEdit) {
-      const item = inventory.find((inv) => inv.id === prodId);
-      const rec = item ? item.onHand : 0;
+      const locItem = warehouseStockBreakdown.find((b) => b.locationId === locationId);
+      const rec = locItem ? locItem.onHand : (inventory.find((inv) => inv.id === prodId)?.onHand ?? 0);
       setPhysicalCount(rec + 5);
     }
   };
@@ -89,7 +150,7 @@ export function AdjustmentFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative">
+      <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
@@ -128,7 +189,7 @@ export function AdjustmentFormModal({
             </div>
           ) : null}
 
-          {/* Reference & Location */}
+          {/* Reference & Location Dropdown */}
           <div className="grid grid-cols-2 gap-3">
             <Field
               label="Reference"
@@ -148,15 +209,25 @@ export function AdjustmentFormModal({
               />
             </Field>
 
-            <Field label="Location" htmlFor="locationId" error={errors.locationId}>
-              <Input
+            <Field label="Audit Location" htmlFor="locationId" error={errors.locationId}>
+              <select
                 id="locationId"
                 name="locationId"
                 value={locationId}
                 onChange={(e) => setLocationId(e.target.value)}
-                placeholder="WH/Stock"
                 required
-              />
+                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
+              >
+                {allLocations.map((loc) => {
+                  const stockItem = warehouseStockBreakdown.find((b) => b.locationId === loc.id);
+                  const stock = stockItem ? stockItem.onHand : 0;
+                  return (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.id} — {loc.warehouseName} ({stock} {selectedProduct?.unit || 'pcs'})
+                    </option>
+                  );
+                })}
+              </select>
             </Field>
           </div>
 
@@ -168,14 +239,14 @@ export function AdjustmentFormModal({
               required
               value={selectedProductId}
               onChange={(e) => handleProductChange(e.target.value)}
-              className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-sans"
             >
               {products.map((p) => {
                 const invItem = inventory.find((i) => i.id === p.id);
                 const stock = invItem ? invItem.onHand : 0;
                 return (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.sku}) — Recorded: {stock} {p.unit}
+                    {p.name} ({p.sku}) — Total Stock: {stock} {p.unit}
                   </option>
                 );
               })}
@@ -184,7 +255,7 @@ export function AdjustmentFormModal({
 
           {/* Stock Quantities & Live Delta Preview */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Current Recorded Stock" htmlFor="recordedStockDisplay" hint="Calculated read-only">
+            <Field label={`Recorded Stock @ ${locationId}`} htmlFor="recordedStockDisplay" hint="Calculated for location">
               <Input
                 id="recordedStockDisplay"
                 type="number"
@@ -209,6 +280,54 @@ export function AdjustmentFormModal({
               />
             </Field>
           </div>
+
+          {/* Warehouse Stock Breakdown Panel */}
+          {selectedProductId && warehouseStockBreakdown.length > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2 text-xs font-mono">
+                <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  Stock Breakdown Across All Warehouses
+                </span>
+                <span className="text-zinc-400">
+                  Total: <strong className="text-emerald-400">{warehouseStockBreakdown.reduce((sum, b) => sum + b.onHand, 0)} {selectedProduct?.unit || "pcs"}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                {warehouseStockBreakdown.map((item) => {
+                  const isSelected = item.locationId === locationId;
+                  return (
+                    <div
+                      key={item.locationId}
+                      onClick={() => setLocationId(item.locationId)}
+                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer transition ${
+                        isSelected
+                          ? "bg-amber-500/10 border-amber-500/50 text-amber-200"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-bold text-zinc-200 block truncate">{item.locationId}</span>
+                        <span className="text-[10px] text-zinc-500 block truncate">{item.warehouseName}</span>
+                      </div>
+                      <span
+                        className={`font-bold shrink-0 px-2 py-0.5 rounded text-[11px] ${
+                          item.onHand > 0
+                            ? isSelected
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-zinc-900 text-zinc-600 border border-zinc-800"
+                        }`}
+                      >
+                        {item.onHand} {selectedProduct?.unit || "pcs"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Delta Calculation Card */}
           <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3.5 font-mono text-xs space-y-1">

@@ -14,13 +14,15 @@ import {
   AlertTriangleIcon,
   EditIcon,
 } from "@/components/ui/icons";
-import type { AdjustmentDetailRow, ProductRow, InventoryRow } from "@/lib/db/queries";
+import type { AdjustmentDetailRow, ProductRow, InventoryRow, WarehouseRow, MoveHistoryRow } from "@/lib/db/queries";
 
 interface AdjustmentsClientProps {
   adjustments: AdjustmentDetailRow[];
   products: ProductRow[];
   inventory: InventoryRow[];
   nextReference: string;
+  warehouses?: WarehouseRow[];
+  movements?: MoveHistoryRow[];
 }
 
 export function AdjustmentsClient({
@@ -28,6 +30,8 @@ export function AdjustmentsClient({
   products,
   inventory,
   nextReference,
+  warehouses = [],
+  movements = [],
 }: AdjustmentsClientProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -409,6 +413,8 @@ export function AdjustmentsClient({
         inventory={inventory}
         defaultReference={nextReference}
         adjustmentToEdit={editingAdjustment}
+        warehouses={warehouses}
+        movements={movements}
         onSuccessToast={showToast}
       />
     </div>
