@@ -145,7 +145,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                   name="identifier"
                   type="text"
                   placeholder="demo_user or demo@stocksense.app"
-                  defaultValue="demo_user"
+                  defaultValue=""
                   required
                   className="bg-zinc-950 border-zinc-700 focus:border-amber-500 font-mono"
                 />
@@ -157,7 +157,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                   name="password"
                   type="password"
                   placeholder="••••••••"
-                  defaultValue="Demo@123"
+                  defaultValue=""
                   required
                   className="bg-zinc-950 border-zinc-700 focus:border-amber-500 font-mono"
                 />
