@@ -2366,6 +2366,7 @@ export type UserRow = {
   loginId: string;
   email: string;
   passwordHash: string;
+  role: "inventory_manager" | "warehouse_staff";
   createdAt: Date;
   updatedAt: Date;
 };
@@ -2376,6 +2377,16 @@ const fallbackUsers: UserRow[] = [
     loginId: "demo_user",
     email: "demo@stocksense.app",
     passwordHash: bcrypt.hashSync("Demo@123", 10),
+    role: "inventory_manager",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "u2",
+    loginId: "staff_user",
+    email: "staff@stocksense.app",
+    passwordHash: bcrypt.hashSync("Demo@123", 10),
+    role: "warehouse_staff",
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -2390,7 +2401,12 @@ export async function getUserByLoginId(loginId: string): Promise<UserRow | null>
       .where(sql`lower(${users.loginId}) = ${target}`)
       .limit(1);
 
-    if (rows.length > 0) return rows[0];
+    if (rows.length > 0) {
+      return {
+        ...rows[0],
+        role: (rows[0].role as "inventory_manager" | "warehouse_staff") || "inventory_manager",
+      };
+    }
   } catch (_e) {
     // fallback
   }
@@ -2407,7 +2423,12 @@ export async function getUserByEmail(email: string): Promise<UserRow | null> {
       .where(sql`lower(${users.email}) = ${target}`)
       .limit(1);
 
-    if (rows.length > 0) return rows[0];
+    if (rows.length > 0) {
+      return {
+        ...rows[0],
+        role: (rows[0].role as "inventory_manager" | "warehouse_staff") || "inventory_manager",
+      };
+    }
   } catch (_e) {
     // fallback
   }
@@ -2429,7 +2450,12 @@ export async function getUserByIdentifier(identifier: string): Promise<UserRow |
       )
       .limit(1);
 
-    if (rows.length > 0) return rows[0];
+    if (rows.length > 0) {
+      return {
+        ...rows[0],
+        role: (rows[0].role as "inventory_manager" | "warehouse_staff") || "inventory_manager",
+      };
+    }
   } catch (_e) {
     // fallback
   }
@@ -2445,7 +2471,12 @@ export async function getUserByIdentifier(identifier: string): Promise<UserRow |
 export async function getUserById(id: string): Promise<UserRow | null> {
   try {
     const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    if (rows.length > 0) return rows[0];
+    if (rows.length > 0) {
+      return {
+        ...rows[0],
+        role: (rows[0].role as "inventory_manager" | "warehouse_staff") || "inventory_manager",
+      };
+    }
   } catch (_e) {
     // fallback
   }
@@ -2457,9 +2488,11 @@ export async function insertUser(values: {
   loginId: string;
   email: string;
   passwordHash: string;
+  role?: "inventory_manager" | "warehouse_staff";
 }): Promise<UserRow> {
   const loginIdClean = values.loginId.trim();
   const emailClean = values.email.trim().toLowerCase();
+  const role = values.role || "inventory_manager";
 
   try {
     const rows = await db
@@ -2468,6 +2501,7 @@ export async function insertUser(values: {
         loginId: loginIdClean,
         email: emailClean,
         passwordHash: values.passwordHash,
+        role,
       })
       .returning();
 
@@ -2478,6 +2512,7 @@ export async function insertUser(values: {
         loginId: u.loginId,
         email: u.email,
         passwordHash: u.passwordHash,
+        role: (u.role as "inventory_manager" | "warehouse_staff") || role,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       };
@@ -2493,11 +2528,46 @@ export async function insertUser(values: {
     loginId: loginIdClean,
     email: emailClean,
     passwordHash: values.passwordHash,
+    role,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
   fallbackUsers.push(newU);
   return newU;
+}
+
+export async function updateUserRole(
+  userId: string,
+  role: "inventory_manager" | "warehouse_staff",
+): Promise<UserRow | null> {
+  try {
+    const rows = await db
+      .update(users)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (rows.length > 0) {
+      const idx = fallbackUsers.findIndex((u) => u.id === userId);
+      if (idx !== -1) {
+        fallbackUsers[idx].role = role;
+      }
+      return {
+        ...rows[0],
+        role: rows[0].role as "inventory_manager" | "warehouse_staff",
+      };
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackUsers.findIndex((u) => u.id === userId);
+  if (idx !== -1) {
+    fallbackUsers[idx].role = role;
+    return fallbackUsers[idx];
+  }
+
+  return null;
 }
 
 export async function updateUserPasswordByEmail(
@@ -2533,6 +2603,78 @@ export async function updateUserPasswordByEmail(
 
   return false;
 }
+
+/**
+ * OTP Code Queries & Fallback Memory Store
+ */
+export type OtpRecord = {
+  id: string;
+  email: string;
+  code: string;
+  expiresAt: Date;
+  createdAt: Date;
+};
+
+const fallbackOtpCodes: OtpRecord[] = [];
+
+export async function createOtpCode(email: string): Promise<string> {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  try {
+    const { otpCodes } = await import("./schema");
+    await db.insert(otpCodes).values({
+      email: email.trim().toLowerCase(),
+      code,
+      expiresAt,
+    });
+  } catch (_e) {
+    // ignore
+  }
+
+  fallbackOtpCodes.push({
+    id: crypto.randomUUID(),
+    email: email.trim().toLowerCase(),
+    code,
+    expiresAt,
+    createdAt: new Date(),
+  });
+
+  return code;
+}
+
+export async function verifyOtpCode(email: string, code: string): Promise<boolean> {
+  const emailClean = email.trim().toLowerCase();
+  const codeClean = code.trim();
+  const now = new Date();
+
+  // Try DB first
+  try {
+    const { otpCodes } = await import("./schema");
+    const rows = await db
+      .select()
+      .from(otpCodes)
+      .where(
+        and(
+          sql`lower(${otpCodes.email}) = ${emailClean}`,
+          eq(otpCodes.code, codeClean),
+        ),
+      );
+
+    const validRow = rows.find((r) => r.expiresAt > now);
+    if (validRow) return true;
+  } catch (_e) {
+    // fallback
+  }
+
+  // Check fallback memory store
+  const validMem = fallbackOtpCodes.find(
+    (o) => o.email === emailClean && o.code === codeClean && o.expiresAt > now,
+  );
+
+  return Boolean(validMem);
+}
+
 
 
 

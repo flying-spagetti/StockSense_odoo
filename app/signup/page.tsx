@@ -114,6 +114,19 @@ export default function SignupPage() {
               />
             </Field>
 
+            {/* Role Selection */}
+            <Field label="System Role" htmlFor="role">
+              <select
+                id="role"
+                name="role"
+                defaultValue="inventory_manager"
+                className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
+              >
+                <option value="inventory_manager">🛡️ Inventory Manager (Full control over Receipts & Deliveries)</option>
+                <option value="warehouse_staff">📦 Warehouse Staff (Internal Transfers, Picking, Shelfing, Counting)</option>
+              </select>
+            </Field>
+
             {/* Password Criteria Checklist Box */}
             <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-400 space-y-1">
               <p className="font-semibold text-zinc-300">Password requirements:</p>

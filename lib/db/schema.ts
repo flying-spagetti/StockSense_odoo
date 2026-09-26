@@ -109,6 +109,11 @@ export const warehouses = pgTable(
 
 export type Warehouse = typeof warehouses.$inferSelect;
 
+export const userRole = pgEnum("user_role", [
+  "inventory_manager",
+  "warehouse_staff",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -116,6 +121,7 @@ export const users = pgTable(
     loginId: text("login_id").notNull(),
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
+    role: userRole("role").notNull().default("inventory_manager"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -130,5 +136,25 @@ export const users = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
+export type UserRole = (typeof userRole.enumValues)[number];
+
+export const otpCodes = pgTable(
+  "otp_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    code: text("code").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("otp_codes_email_idx").on(table.email),
+  ],
+);
+
+export type OtpCode = typeof otpCodes.$inferSelect;
+
 
 

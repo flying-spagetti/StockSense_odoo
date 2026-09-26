@@ -10,6 +10,7 @@ import {
   FilterIcon,
 } from "@/components/ui/icons";
 import type { MoveHistoryRow } from "@/lib/db/queries";
+import { SmartFilterBar } from "@/components/ui/smart-filter-bar";
 
 interface MoveHistoryClientProps {
   movements: MoveHistoryRow[];
@@ -117,109 +118,31 @@ export function MoveHistoryClient({ movements }: MoveHistoryClientProps) {
         </div>
       </div>
 
-      {/* Filter Controls Row */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 bg-zinc-950 p-3.5 rounded-lg border border-zinc-800 font-mono text-xs">
-        {/* Search */}
-        <div className="relative lg:col-span-2">
-          <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-          <Input
-            type="text"
-            placeholder="Search ref, product, SKU, location..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-zinc-900 border-zinc-700 text-xs focus:border-indigo-500 h-9"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300"
-            >
-              <XIcon className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Document Type Filter */}
-        <div>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            <option value="all">Document: All Types</option>
-            <option value="receipt">Receipt</option>
-            <option value="delivery">Delivery</option>
-            <option value="transfer">Transfer</option>
-            <option value="adjustment">Adjustment</option>
-          </select>
-        </div>
-
-        {/* Status Filter */}
-        <div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            <option value="all">Status: All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="waiting">Waiting</option>
-            <option value="ready">Ready</option>
-            <option value="done">Done</option>
-            <option value="canceled">Canceled</option>
-          </select>
-        </div>
-
-        {/* Location Filter */}
-        <div>
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            <option value="all">Location: All Locations</option>
-            {uniqueLocations.map((loc) => (
-              <option key={loc} value={loc}>
-                {loc}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Category Filter */}
-        <div className="lg:col-span-2">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            <option value="all">Category: All Categories</option>
-            {uniqueCategories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Reset Filters button */}
-        {(search || typeFilter !== "all" || statusFilter !== "all" || locationFilter !== "all" || categoryFilter !== "all") && (
-          <div className="lg:col-span-3 flex items-center justify-end">
-            <button
-              onClick={() => {
-                setSearch("");
-                setTypeFilter("all");
-                setStatusFilter("all");
-                setLocationFilter("all");
-                setCategoryFilter("all");
-              }}
-              className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 underline"
-            >
-              <XIcon className="h-3.5 w-3.5" /> Reset all filters
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Smart Filter Bar: SKU-search & Smart Filters */}
+      <SmartFilterBar
+        values={{
+          search,
+          category: categoryFilter,
+          location: locationFilter,
+          kind: typeFilter,
+          status: statusFilter,
+        }}
+        onChange={(newVals) => {
+          setSearch(newVals.search);
+          setCategoryFilter(newVals.category || "all");
+          setLocationFilter(newVals.location || "all");
+          setTypeFilter(newVals.kind || "all");
+          setStatusFilter(newVals.status || "all");
+        }}
+        categories={uniqueCategories}
+        locations={uniqueLocations}
+        showCategoryFilter={true}
+        showStockStatusFilter={false}
+        showLocationFilter={true}
+        showKindFilter={true}
+        showStatusFilter={true}
+        placeholder="Search reference, SKU, product name, or location..."
+      />
 
       {/* Ledger Table */}
       <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 shadow-sm">

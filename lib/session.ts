@@ -11,6 +11,7 @@ export type SessionPayload = {
   userId: string;
   loginId: string;
   email: string;
+  role: "inventory_manager" | "warehouse_staff";
   expiresAt: number;
 };
 
@@ -111,12 +112,14 @@ export async function createSessionCookie(user: {
   id: string;
   loginId: string;
   email: string;
+  role?: "inventory_manager" | "warehouse_staff";
 }): Promise<void> {
   const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
   const payload: SessionPayload = {
     userId: user.id,
     loginId: user.loginId,
     email: user.email,
+    role: user.role || "inventory_manager",
     expiresAt,
   };
 

@@ -8,6 +8,9 @@ import {
   getUserByIdentifier,
   insertUser,
   updateUserPasswordByEmail,
+  createOtpCode,
+  verifyOtpCode,
+  updateUserRole,
 } from "@/lib/db/queries";
 import {
   parseLoginForm,
@@ -15,7 +18,7 @@ import {
   parseResetPasswordForm,
   type AuthFormState,
 } from "@/lib/validation";
-import { createSessionCookie, destroySessionCookie } from "@/lib/session";
+import { createSessionCookie, destroySessionCookie, getSession } from "@/lib/session";
 
 export async function loginAction(
   _prevState: AuthFormState,
@@ -42,9 +45,80 @@ export async function loginAction(
     id: user.id,
     loginId: user.loginId,
     email: user.email,
+    role: user.role,
   });
 
   redirect("/");
+}
+
+export async function requestOtpAction(emailOrLoginId: string): Promise<{
+  success: boolean;
+  message: string;
+  code?: string;
+}> {
+  const user = await getUserByIdentifier(emailOrLoginId);
+  const emailToUse = user ? user.email : (emailOrLoginId.includes("@") ? emailOrLoginId : `${emailOrLoginId}@stocksense.app`);
+
+  const code = await createOtpCode(emailToUse);
+
+  return {
+    success: true,
+    message: `OTP sent to ${emailToUse}. Code generated successfully!`,
+    code,
+  };
+}
+
+export async function verifyOtpAction(
+  emailOrLoginId: string,
+  otpCode: string,
+  selectedRole?: "inventory_manager" | "warehouse_staff",
+): Promise<{ success: boolean; message: string }> {
+  let user = await getUserByIdentifier(emailOrLoginId);
+  const emailToUse = user ? user.email : (emailOrLoginId.includes("@") ? emailOrLoginId : `${emailOrLoginId}@stocksense.app`);
+
+  const isValid = await verifyOtpCode(emailToUse, otpCode);
+  if (!isValid) {
+    return { success: false, message: "Invalid or expired OTP verification code." };
+  }
+
+  if (!user) {
+    // Create new user automatically via OTP login
+    const loginId = emailOrLoginId.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "_");
+    const passwordHash = bcrypt.hashSync("OtpUser@123", 10);
+    user = await insertUser({
+      loginId,
+      email: emailToUse,
+      passwordHash,
+      role: selectedRole || "inventory_manager",
+    });
+  } else if (selectedRole && user.role !== selectedRole) {
+    await updateUserRole(user.id, selectedRole);
+    user.role = selectedRole;
+  }
+
+  await createSessionCookie({
+    id: user.id,
+    loginId: user.loginId,
+    email: user.email,
+    role: user.role,
+  });
+
+  redirect("/");
+}
+
+export async function switchRoleAction(
+  newRole: "inventory_manager" | "warehouse_staff",
+): Promise<void> {
+  const session = await getSession();
+  if (session) {
+    await updateUserRole(session.userId, newRole);
+    await createSessionCookie({
+      id: session.userId,
+      loginId: session.loginId,
+      email: session.email,
+      role: newRole,
+    });
+  }
 }
 
 export async function signupAction(
@@ -58,6 +132,8 @@ export async function signupAction(
   }
 
   const { loginId, email, password } = result.data;
+  const roleRaw = formData.get("role") as string;
+  const role = roleRaw === "warehouse_staff" ? "warehouse_staff" : "inventory_manager";
 
   // Check unique loginId
   const existingLogin = await getUserByLoginId(loginId);
@@ -84,12 +160,14 @@ export async function signupAction(
     loginId,
     email,
     passwordHash,
+    role,
   });
 
   await createSessionCookie({
     id: newUser.id,
     loginId: newUser.loginId,
     email: newUser.email,
+    role: newUser.role,
   });
 
   redirect("/");
@@ -134,3 +212,4 @@ export async function logoutAction(): Promise<void> {
   await destroySessionCookie();
   redirect("/login");
 }
+

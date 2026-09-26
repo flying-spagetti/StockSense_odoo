@@ -16,6 +16,7 @@ import {
   PackageIcon,
 } from "@/components/ui/icons";
 import type { InventoryRow } from "@/lib/db/queries";
+import { SmartFilterBar } from "@/components/ui/smart-filter-bar";
 
 interface ProductsClientProps {
   products: InventoryRow[];
@@ -110,81 +111,35 @@ export function ProductsClient({ products }: ProductsClientProps) {
         </div>
       </div>
 
-      {/* Action Bar: Search, Category Filter, Stock Filter, Add Product Button */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-zinc-800 pb-5">
-        <div className="flex flex-1 flex-col sm:flex-row gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-            <Input
-              type="text"
-              placeholder="Search product name, SKU, or category..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 bg-zinc-950 border-zinc-700 focus:border-amber-500"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300"
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+      {/* Smart Filter Bar: SKU-search & Smart Filters */}
+      <div className="flex flex-col gap-3">
+        <SmartFilterBar
+          values={{
+            search,
+            category: selectedCategory,
+            stockStatus: selectedStockFilter,
+          }}
+          onChange={(newVals) => {
+            setSearch(newVals.search);
+            setSelectedCategory(newVals.category || "all");
+            setSelectedStockFilter(newVals.stockStatus || "all");
+          }}
+          categories={categories}
+          showCategoryFilter={true}
+          showStockStatusFilter={true}
+          showStatusFilter={false}
+          placeholder="Search by SKU or product name..."
+        />
 
-          {/* Category Filter */}
-          <div className="relative w-full sm:w-48">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 pr-8 text-xs font-mono text-zinc-200 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stock Filter */}
-          <div className="relative w-full sm:w-48">
-            <select
-              value={selectedStockFilter}
-              onChange={(e) => setSelectedStockFilter(e.target.value)}
-              className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 pr-8 text-xs font-mono text-zinc-200 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-            >
-              <option value="all">All Stock Status</option>
-              <option value="reorder">Low Stock (≤ Reorder)</option>
-              <option value="instock">In Stock (&gt; Reorder)</option>
-              <option value="zero">Zero Stock (0)</option>
-            </select>
-          </div>
-
-          {(search || selectedCategory !== "all" || selectedStockFilter !== "all") && (
-            <button
-              onClick={() => {
-                setSearch("");
-                setSelectedCategory("all");
-                setSelectedStockFilter("all");
-              }}
-              className="inline-flex items-center gap-1 text-xs font-mono text-amber-400 hover:underline px-2 py-1"
-            >
-              <XIcon className="h-3 w-3" /> Clear filters
-            </button>
-          )}
+        <div className="flex justify-end">
+          <Button
+            onClick={() => setIsAddOpen(true)}
+            className="flex items-center justify-center gap-2"
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span>Add Product</span>
+          </Button>
         </div>
-
-        {/* Add Product Button */}
-        <Button
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center justify-center gap-2"
-        >
-          <PlusIcon className="h-4 w-4" />
-          <span>Add Product</span>
-        </Button>
       </div>
 
       {/* Products Table */}

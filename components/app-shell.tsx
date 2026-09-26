@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { logoutAction } from "@/app/actions/auth";
+import { logoutAction, switchRoleAction } from "@/app/actions/auth";
 import {
   DashboardIcon,
   ProductsIcon,
@@ -44,17 +44,33 @@ const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
 
 interface AppShellProps {
   children: React.ReactNode;
-  user?: { userId: string; loginId: string; email: string } | null;
+  user?: {
+    userId: string;
+    loginId: string;
+    email: string;
+    role?: "inventory_manager" | "warehouse_staff";
+  } | null;
 }
 
 export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   // If visiting an auth page, render child component directly without sidebar
   if (AUTH_ROUTES.includes(pathname)) {
     return <>{children}</>;
   }
+
+  const currentRole = user?.role || "inventory_manager";
+  const isManager = currentRole === "inventory_manager";
+
+  const handleSwitchRole = () => {
+    startTransition(async () => {
+      const targetRole = isManager ? "warehouse_staff" : "inventory_manager";
+      await switchRoleAction(targetRole);
+    });
+  };
 
   const isActive = (href: string) => {
     if (href === "/") {
@@ -189,8 +205,8 @@ export function AppShell({ children, user }: AppShellProps) {
           </div>
         </div>
 
-        {/* Industrial Sidebar Footer */}
-        <div className="border-t border-zinc-800 bg-zinc-950/60 p-4 font-mono text-xs">
+        {/* Industrial Sidebar Footer with Role Info */}
+        <div className="border-t border-zinc-800 bg-zinc-950/60 p-4 font-mono text-xs space-y-2">
           <div className="flex items-center justify-between text-zinc-400">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -198,9 +214,20 @@ export function AppShell({ children, user }: AppShellProps) {
             </div>
             <span className="text-[10px] text-zinc-500">v2.0.0</span>
           </div>
-          <p className="mt-1 text-[10px] text-zinc-500 truncate">
-            User: <span className="text-zinc-300 font-semibold">{displayUser}</span>
-          </p>
+          <div className="flex items-center justify-between pt-1 border-t border-zinc-900">
+            <span className="text-[10px] text-zinc-500 truncate">
+              User: <span className="text-zinc-300 font-semibold">{displayUser}</span>
+            </span>
+            <span
+              className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold border ${
+                isManager
+                  ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                  : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30"
+              }`}
+            >
+              {isManager ? "Manager" : "Staff"}
+            </span>
+          </div>
         </div>
       </aside>
 
@@ -231,12 +258,23 @@ export function AppShell({ children, user }: AppShellProps) {
             </div>
           </div>
 
-          {/* Header Right Status Badges & User Menu */}
+          {/* Header Right Status Badges, Role Switcher & User Menu */}
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-xs text-zinc-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span>DERIVED STOCK ENGINE</span>
-            </div>
+            {/* Role Switcher Badge Button */}
+            <button
+              disabled={isPending}
+              onClick={handleSwitchRole}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs transition cursor-pointer hover:scale-105 ${
+                isManager
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                  : "border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+              }`}
+              title={`Active role: ${isManager ? "Inventory Manager" : "Warehouse Staff"}. Click to switch role.`}
+            >
+              <span className="text-sm">{isManager ? "🛡️" : "📦"}</span>
+              <span className="font-bold">{isManager ? "Inventory Manager" : "Warehouse Staff"}</span>
+              <span className="text-[10px] text-zinc-400 bg-zinc-950 px-1.5 py-0.2 rounded border border-zinc-800">Switch</span>
+            </button>
 
             {/* Small User Menu with Logout Action */}
             <div className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 font-mono text-xs">
