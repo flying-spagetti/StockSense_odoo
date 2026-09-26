@@ -10,6 +10,7 @@ export type ProductInput = {
   category: string;
   unit: string;
   reorderLevel: number;
+  initialStock?: number;
 };
 
 export type ProductFormResult =
@@ -73,6 +74,7 @@ export function parseProductForm(formData: FormData): ProductFormResult {
   const category = readText(formData, "category") || "General";
   const unit = readText(formData, "unit") || "pcs";
   const rawReorderLevel = readText(formData, "reorderLevel");
+  const rawInitialStock = readText(formData, "initialStock");
 
   if (!sku) {
     errors.sku = "SKU is required.";
@@ -99,11 +101,21 @@ export function parseProductForm(formData: FormData): ProductFormResult {
     errors.reorderLevel = "Reorder level must be a whole number of 0 or more.";
   }
 
+  let initialStock: number | undefined = undefined;
+  if (rawInitialStock !== "") {
+    const val = Number(rawInitialStock);
+    if (isNaN(val) || !Number.isInteger(val) || val < 0) {
+      errors.initialStock = "Initial stock must be a whole number of 0 or more.";
+    } else {
+      initialStock = val;
+    }
+  }
+
   if (Object.keys(errors).length > 0) {
     return { errors };
   }
 
-  return { data: { sku, name, category, unit, reorderLevel } };
+  return { data: { sku, name, category, unit, reorderLevel, initialStock } };
 }
 
 export function parseReceiptForm(formData: FormData): ReceiptFormResult {

@@ -107,6 +107,24 @@ export function ProductForm({
         />
       </Field>
 
+      {!product && (
+        <Field
+          label="Initial Opening Stock (Optional)"
+          htmlFor="initialStock"
+          error={errors.initialStock}
+          hint="Automatically posts an Opening Balance receipt"
+        >
+          <Input
+            id="initialStock"
+            name="initialStock"
+            type="number"
+            min={0}
+            step={1}
+            placeholder="0 (e.g. 50 pcs opening inventory)"
+          />
+        </Field>
+      )}
+
       <div className="flex items-center justify-end gap-3 pt-2">
         <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
           {isPending ? "Processing..." : submitLabel}

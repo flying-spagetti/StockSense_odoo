@@ -349,47 +349,72 @@ export async function insertProduct(values: {
   category?: string;
   unit: string;
   reorderLevel: number;
+  initialStock?: number;
 }): Promise<ProductRow> {
+  const { initialStock, ...productValues } = values;
   const skuExistsFallback = fallbackProducts.some(
-    (p) => p.sku.toLowerCase() === values.sku.toLowerCase(),
+    (p) => p.sku.toLowerCase() === productValues.sku.toLowerCase(),
   );
+
+  let createdProd: ProductRow;
 
   try {
     const rows = await db
       .insert(products)
       .values({
-        ...values,
-        category: values.category || "General",
+        ...productValues,
+        category: productValues.category || "General",
       })
       .onConflictDoNothing()
       .returning();
 
     if (rows.length === 0) {
-      throw new DuplicateSkuError(values.sku);
+      throw new DuplicateSkuError(productValues.sku);
     }
 
     fallbackProducts.push(rows[0]);
-    return rows[0];
+    createdProd = rows[0];
   } catch (error) {
     if (error instanceof DuplicateSkuError) {
       throw error;
     }
     if (skuExistsFallback) {
-      throw new DuplicateSkuError(values.sku);
+      throw new DuplicateSkuError(productValues.sku);
     }
     const newProduct: ProductRow = {
       id: crypto.randomUUID(),
-      sku: values.sku,
-      name: values.name,
-      category: values.category || "General",
-      unit: values.unit,
-      reorderLevel: values.reorderLevel,
+      sku: productValues.sku,
+      name: productValues.name,
+      category: productValues.category || "General",
+      unit: productValues.unit,
+      reorderLevel: productValues.reorderLevel,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     fallbackProducts.push(newProduct);
-    return newProduct;
+    createdProd = newProduct;
   }
+
+  // If initial stock was provided and is positive -> create Opening Balance receipt
+  if (initialStock && initialStock > 0) {
+    try {
+      const ref = await getNextReceiptReference();
+      await insertReceipt({
+        productId: createdProd.id,
+        quantity: initialStock,
+        reference: ref,
+        supplier: "Opening Balance",
+        toLocationId: "WH/Stock",
+        fromLocationId: null,
+        status: "done",
+        note: `Initial opening stock created during product onboarding (${createdProd.name})`,
+      });
+    } catch (_e) {
+      // ignore
+    }
+  }
+
+  return createdProd;
 }
 
 export async function updateProductById(
