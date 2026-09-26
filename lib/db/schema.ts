@@ -109,3 +109,26 @@ export const warehouses = pgTable(
 
 export type Warehouse = typeof warehouses.$inferSelect;
 
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    loginId: text("login_id").notNull(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("users_login_id_unique").on(table.loginId),
+    uniqueIndex("users_email_unique").on(table.email),
+  ],
+);
+
+export type User = typeof users.$inferSelect;
+
+

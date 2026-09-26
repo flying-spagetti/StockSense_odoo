@@ -449,5 +449,173 @@ export function parseWarehouseForm(formData: FormData): WarehouseFormResult {
   };
 }
 
+export type AuthFormState = {
+  errors?: Record<string, string>;
+  success?: boolean;
+  message?: string;
+  fieldValues?: Record<string, string>;
+};
+
+export function isPasswordStrong(password: string): boolean {
+  if (password.length < 8) return false;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  return hasUpper && hasLower && hasNumber && hasSpecial;
+}
+
+export type SignupInput = {
+  loginId: string;
+  email: string;
+  password: string;
+};
+
+export type SignupResult =
+  | { data: SignupInput }
+  | { errors: Record<string, string> };
+
+export function parseSignupForm(formData: FormData): SignupResult {
+  const errors: Record<string, string> = {};
+
+  const loginId = readText(formData, "loginId");
+  const email = readText(formData, "email");
+  const password = readText(formData, "password");
+  const confirmPassword = readText(formData, "confirmPassword") || readText(formData, "reenterPassword");
+
+  if (!loginId) {
+    errors.loginId = "Login ID is required.";
+  } else if (loginId.length < 6 || loginId.length > 12) {
+    errors.loginId = "Login ID must be 6–12 characters long.";
+  } else if (!/^[A-Za-z0-9_]+$/.test(loginId)) {
+    errors.loginId = "Login ID can only contain letters, numbers, and underscores.";
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email) {
+    errors.email = "Email ID is required.";
+  } else if (!emailRegex.test(email)) {
+    errors.email = "Please enter a valid email address.";
+  }
+
+  if (!password) {
+    errors.password = "Password is required.";
+  } else if (!isPasswordStrong(password)) {
+    errors.password =
+      "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
+  }
+
+  if (!confirmPassword) {
+    errors.confirmPassword = "Please re-enter your password.";
+  } else if (password !== confirmPassword) {
+    errors.confirmPassword = "Passwords do not match.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  return {
+    data: {
+      loginId,
+      email,
+      password,
+    },
+  };
+}
+
+export type LoginInput = {
+  identifier: string;
+  password: string;
+};
+
+export type LoginResult =
+  | { data: LoginInput }
+  | { errors: Record<string, string> };
+
+export function parseLoginForm(formData: FormData): LoginResult {
+  const errors: Record<string, string> = {};
+
+  const identifier = readText(formData, "identifier") || readText(formData, "loginId");
+  const password = readText(formData, "password");
+
+  if (!identifier) {
+    errors.identifier = "Login ID or Email is required.";
+  }
+
+  if (!password) {
+    errors.password = "Password is required.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  return {
+    data: {
+      identifier,
+      password,
+    },
+  };
+}
+
+export type ResetPasswordInput = {
+  email: string;
+  otp: string;
+  newPassword: string;
+};
+
+export type ResetPasswordResult =
+  | { data: ResetPasswordInput }
+  | { errors: Record<string, string> };
+
+export function parseResetPasswordForm(formData: FormData): ResetPasswordResult {
+  const errors: Record<string, string> = {};
+
+  const email = readText(formData, "email");
+  const otp = readText(formData, "otp");
+  const newPassword = readText(formData, "newPassword") || readText(formData, "password");
+  const confirmPassword = readText(formData, "confirmPassword") || readText(formData, "reenterPassword");
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email) {
+    errors.email = "Email ID is required.";
+  } else if (!emailRegex.test(email)) {
+    errors.email = "Please enter a valid email address.";
+  }
+
+  if (!otp) {
+    errors.otp = "OTP is required.";
+  } else if (otp.trim() !== "123456") {
+    errors.otp = "Invalid Demo OTP. Use 123456.";
+  }
+
+  if (!newPassword) {
+    errors.newPassword = "New password is required.";
+  } else if (!isPasswordStrong(newPassword)) {
+    errors.newPassword =
+      "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
+  }
+
+  if (!confirmPassword) {
+    errors.confirmPassword = "Please re-enter your new password.";
+  } else if (newPassword !== confirmPassword) {
+    errors.confirmPassword = "Passwords do not match.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  return {
+    data: {
+      email,
+      otp,
+      newPassword,
+    },
+  };
+}
+
+
 
 

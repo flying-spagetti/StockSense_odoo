@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { getSession } from "@/lib/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,18 +19,20 @@ export const metadata: Metadata = {
   description: "Inventory derived strictly from completed stock movements.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getSession();
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full bg-zinc-950 font-sans text-zinc-100 selection:bg-amber-500/30 selection:text-amber-200">
-        <AppShell>{children}</AppShell>
+        <AppShell user={session}>{children}</AppShell>
       </body>
     </html>
   );

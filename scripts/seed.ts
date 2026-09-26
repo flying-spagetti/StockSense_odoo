@@ -14,9 +14,11 @@ if (!process.env.DATABASE_URL && existsSync(resolve(process.cwd(), ".env"))) {
   }
 }
 
+import bcrypt from "bcryptjs";
+import { sql } from "drizzle-orm";
 import { db, pool } from "../lib/db";
 import { listInventory } from "../lib/db/queries";
-import { products, stockMovements } from "../lib/db/schema";
+import { products, stockMovements, users, warehouses } from "../lib/db/schema";
 
 const seedProducts = [
   { sku: "SKU-1001", name: "Cotton T-Shirt", category: "Apparel", unit: "pcs", reorderLevel: 20 },
@@ -36,6 +38,50 @@ function idOf(idsBySku: Map<string, string>, sku: string): string {
 }
 
 async function main() {
+  console.log("Ensuring database tables exist...");
+
+  // Execute table DDL if missing
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      login_id TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS warehouses (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      address TEXT,
+      is_active BOOLEAN DEFAULT TRUE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  console.log("Seeding demo user...");
+  const passwordHash = bcrypt.hashSync("Demo@123", 10);
+  
+  await db
+    .insert(users)
+    .values({
+      loginId: "demo_user",
+      email: "demo@stocksense.app",
+      passwordHash,
+    })
+    .onConflictDoUpdate({
+      target: users.loginId,
+      set: {
+        email: "demo@stocksense.app",
+        passwordHash,
+        updatedAt: new Date(),
+      },
+    });
+
   console.log("Clearing products and stock movements...");
   await db.delete(stockMovements);
   await db.delete(products);
@@ -97,10 +143,14 @@ async function main() {
       quantity: 300,
       status: "done",
     },
-    // No movements at all -> 0 on hand.
   ]);
 
   const inventory = await listInventory();
+
+  console.log("\nDemo user seeded successfully:");
+  console.log("  Login ID: demo_user");
+  console.log("  Email:    demo@stocksense.app");
+  console.log("  Password: Demo@123");
 
   console.log("\nDerived inventory (done movements only):");
 

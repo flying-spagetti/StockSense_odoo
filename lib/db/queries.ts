@@ -1,6 +1,7 @@
-import { and, eq, sql, desc } from "drizzle-orm";
+import { and, eq, or, sql, desc } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db } from "./index";
-import { products, stockMovements, warehouses } from "./schema";
+import { products, stockMovements, warehouses, users } from "./schema";
 
 export type ProductRow = typeof products.$inferSelect;
 
@@ -2356,6 +2357,183 @@ export async function toggleWarehouseStatusById(id: string): Promise<WarehouseRo
 
   return null;
 }
+
+/**
+ * User / Authentication Queries
+ */
+export type UserRow = {
+  id: string;
+  loginId: string;
+  email: string;
+  passwordHash: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const fallbackUsers: UserRow[] = [
+  {
+    id: "u1",
+    loginId: "demo_user",
+    email: "demo@stocksense.app",
+    passwordHash: bcrypt.hashSync("Demo@123", 10),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+];
+
+export async function getUserByLoginId(loginId: string): Promise<UserRow | null> {
+  const target = loginId.trim().toLowerCase();
+  try {
+    const rows = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.loginId}) = ${target}`)
+      .limit(1);
+
+    if (rows.length > 0) return rows[0];
+  } catch (_e) {
+    // fallback
+  }
+
+  return fallbackUsers.find((u) => u.loginId.toLowerCase() === target) ?? null;
+}
+
+export async function getUserByEmail(email: string): Promise<UserRow | null> {
+  const target = email.trim().toLowerCase();
+  try {
+    const rows = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = ${target}`)
+      .limit(1);
+
+    if (rows.length > 0) return rows[0];
+  } catch (_e) {
+    // fallback
+  }
+
+  return fallbackUsers.find((u) => u.email.toLowerCase() === target) ?? null;
+}
+
+export async function getUserByIdentifier(identifier: string): Promise<UserRow | null> {
+  const target = identifier.trim().toLowerCase();
+  try {
+    const rows = await db
+      .select()
+      .from(users)
+      .where(
+        or(
+          sql`lower(${users.loginId}) = ${target}`,
+          sql`lower(${users.email}) = ${target}`,
+        ),
+      )
+      .limit(1);
+
+    if (rows.length > 0) return rows[0];
+  } catch (_e) {
+    // fallback
+  }
+
+  return (
+    fallbackUsers.find(
+      (u) =>
+        u.loginId.toLowerCase() === target || u.email.toLowerCase() === target,
+    ) ?? null
+  );
+}
+
+export async function getUserById(id: string): Promise<UserRow | null> {
+  try {
+    const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (rows.length > 0) return rows[0];
+  } catch (_e) {
+    // fallback
+  }
+
+  return fallbackUsers.find((u) => u.id === id) ?? null;
+}
+
+export async function insertUser(values: {
+  loginId: string;
+  email: string;
+  passwordHash: string;
+}): Promise<UserRow> {
+  const loginIdClean = values.loginId.trim();
+  const emailClean = values.email.trim().toLowerCase();
+
+  try {
+    const rows = await db
+      .insert(users)
+      .values({
+        loginId: loginIdClean,
+        email: emailClean,
+        passwordHash: values.passwordHash,
+      })
+      .returning();
+
+    if (rows.length > 0) {
+      const u = rows[0];
+      const newU: UserRow = {
+        id: u.id,
+        loginId: u.loginId,
+        email: u.email,
+        passwordHash: u.passwordHash,
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt,
+      };
+      fallbackUsers.push(newU);
+      return newU;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const newU: UserRow = {
+    id: crypto.randomUUID(),
+    loginId: loginIdClean,
+    email: emailClean,
+    passwordHash: values.passwordHash,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  fallbackUsers.push(newU);
+  return newU;
+}
+
+export async function updateUserPasswordByEmail(
+  email: string,
+  newPasswordHash: string,
+): Promise<boolean> {
+  const target = email.trim().toLowerCase();
+  try {
+    const rows = await db
+      .update(users)
+      .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
+      .where(sql`lower(${users.email}) = ${target}`)
+      .returning();
+
+    if (rows.length > 0) {
+      const idx = fallbackUsers.findIndex((u) => u.email.toLowerCase() === target);
+      if (idx !== -1) {
+        fallbackUsers[idx].passwordHash = newPasswordHash;
+        fallbackUsers[idx].updatedAt = new Date();
+      }
+      return true;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackUsers.findIndex((u) => u.email.toLowerCase() === target);
+  if (idx !== -1) {
+    fallbackUsers[idx].passwordHash = newPasswordHash;
+    fallbackUsers[idx].updatedAt = new Date();
+    return true;
+  }
+
+  return false;
+}
+
 
 
 

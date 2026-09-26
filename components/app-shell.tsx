@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logoutAction } from "@/app/actions/auth";
 import {
   DashboardIcon,
   ProductsIcon,
@@ -39,9 +40,21 @@ const secondaryNavItems: NavItem[] = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
+
+interface AppShellProps {
+  children: React.ReactNode;
+  user?: { userId: string; loginId: string; email: string } | null;
+}
+
+export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // If visiting an auth page, render child component directly without sidebar
+  if (AUTH_ROUTES.includes(pathname)) {
+    return <>{children}</>;
+  }
 
   const isActive = (href: string) => {
     if (href === "/") {
@@ -62,6 +75,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/settings")) return "System Settings";
     return "StockSense Engine";
   };
+
+  const displayUser = user?.loginId || "demo_user";
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
@@ -181,10 +196,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="h-2 w-2 rounded-full bg-emerald-500" />
               <span className="text-[11px] font-medium text-zinc-300">HUB-MAIN-A</span>
             </div>
-            <span className="text-[10px] text-zinc-500">v1.2.0</span>
+            <span className="text-[10px] text-zinc-500">v2.0.0</span>
           </div>
           <p className="mt-1 text-[10px] text-zinc-500 truncate">
-            Quantity derived from completed moves
+            User: <span className="text-zinc-300 font-semibold">{displayUser}</span>
           </p>
         </div>
       </aside>
@@ -216,11 +231,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Header Right Status Badges */}
+          {/* Header Right Status Badges & User Menu */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-xs text-zinc-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span>STOCK COMPUTATION: DERIVED</span>
+              <span>DERIVED STOCK ENGINE</span>
+            </div>
+
+            {/* Small User Menu with Logout Action */}
+            <div className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1 font-mono text-xs">
+              <div className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/20 text-[10px] font-bold text-amber-400 border border-amber-500/30 uppercase">
+                {displayUser.substring(0, 2)}
+              </div>
+              <span className="font-semibold text-zinc-200 max-w-[100px] truncate">{displayUser}</span>
+              <form action={logoutAction} className="inline-flex">
+                <button
+                  type="submit"
+                  className="ml-1 text-[11px] text-zinc-400 hover:text-red-400 transition border-l border-zinc-800 pl-2 font-mono"
+                  title="Sign out of StockSense"
+                >
+                  Logout
+                </button>
+              </form>
             </div>
           </div>
         </header>
