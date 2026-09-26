@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   DashboardIcon,
   ProductsIcon,
+  PackageIcon,
   ReceiptsIcon,
   DeliveriesIcon,
   TransfersIcon,

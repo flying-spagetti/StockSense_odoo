@@ -154,7 +154,6 @@ function OperationsContent({
         <ReceiptsClient
           receipts={receipts}
           products={products}
-          inventory={inventory}
           nextReference={nextReceiptRef}
         />
       )}
