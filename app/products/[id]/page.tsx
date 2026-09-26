@@ -7,10 +7,12 @@ import { getProductById } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditProductPage(
-  props: PageProps<"/products/[id]">,
-) {
-  const { id } = await props.params;
+export default async function EditProductPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   const product = await getProductById(id);
 
   if (!product) {
@@ -18,28 +20,31 @@ export default async function EditProductPage(
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
+    <div className="max-w-2xl mx-auto space-y-6">
       <Link
         href="/products"
-        className="text-sm text-zinc-600 underline hover:text-zinc-900"
+        className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-amber-400 transition"
       >
-        Back to products
+        &larr; Back to Products Catalog
       </Link>
 
-      <h1 className="mt-4 text-xl font-semibold text-zinc-900">Edit product</h1>
-
-      <div className="mt-6">
-        <Panel
-          title={product.name}
-          description="The SKU identifies the product and cannot be changed."
-        >
-          <ProductForm
-            action={updateProduct}
-            submitLabel="Save changes"
-            product={product}
-          />
-        </Panel>
+      <div>
+        <h1 className="text-xl font-bold text-white tracking-tight">Edit Product</h1>
+        <p className="text-xs text-zinc-400 font-mono mt-1">
+          SKU <span className="text-amber-400">{product.sku}</span> is fixed and cannot be modified.
+        </p>
       </div>
-    </main>
+
+      <Panel
+        title={product.name}
+        description="Update product configuration, category, unit, or reorder threshold."
+      >
+        <ProductForm
+          action={updateProduct}
+          submitLabel="Save Changes"
+          product={product}
+        />
+      </Panel>
+    </div>
   );
 }
