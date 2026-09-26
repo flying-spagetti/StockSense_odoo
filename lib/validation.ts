@@ -1,5 +1,6 @@
 export type ProductFormState = {
   errors?: Record<string, string>;
+  message?: string;
 };
 
 export type ProductInput = {
@@ -12,6 +13,28 @@ export type ProductInput = {
 
 export type ProductFormResult =
   | { data: ProductInput }
+  | { errors: Record<string, string> };
+
+export type ReceiptFormState = {
+  errors?: Record<string, string>;
+  success?: boolean;
+  message?: string;
+  receiptId?: string;
+};
+
+export type ReceiptInput = {
+  productId: string;
+  quantity: number;
+  reference: string;
+  supplier: string;
+  toLocationId: string;
+  fromLocationId: null;
+  status: "draft" | "waiting" | "ready" | "done" | "canceled";
+  note?: string;
+};
+
+export type ReceiptFormResult =
+  | { data: ReceiptInput }
   | { errors: Record<string, string> };
 
 function readText(formData: FormData, key: string): string {
@@ -58,4 +81,56 @@ export function parseProductForm(formData: FormData): ProductFormResult {
   }
 
   return { data: { sku, name, category, unit, reorderLevel } };
+}
+
+export function parseReceiptForm(formData: FormData): ReceiptFormResult {
+  const errors: Record<string, string> = {};
+
+  const productId = readText(formData, "productId");
+  const rawQuantity = readText(formData, "quantity");
+  const reference = readText(formData, "reference") || "WH/IN/0001";
+  const supplier = readText(formData, "supplier") || "Main Supplier";
+  const toLocationId = readText(formData, "toLocationId") || "WH/Stock";
+  const actionType = readText(formData, "actionType"); // "draft" or "validate"
+  const note = readText(formData, "note");
+
+  if (!productId) {
+    errors.productId = "Please select a product.";
+  }
+
+  const quantity = Number(rawQuantity);
+  if (rawQuantity === "" || !Number.isInteger(quantity) || quantity <= 0) {
+    errors.quantity = "Quantity must be a positive whole number greater than 0.";
+  }
+
+  if (reference.length > 64) {
+    errors.reference = "Reference must be 64 characters or fewer.";
+  }
+
+  if (supplier.length > 128) {
+    errors.supplier = "Supplier name must be 128 characters or fewer.";
+  }
+
+  if (toLocationId.length > 128) {
+    errors.toLocationId = "Destination must be 128 characters or fewer.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors };
+  }
+
+  const status: "draft" | "done" = actionType === "validate" ? "done" : "draft";
+
+  return {
+    data: {
+      productId,
+      quantity,
+      reference,
+      supplier,
+      toLocationId,
+      fromLocationId: null,
+      status,
+      note: note || undefined,
+    },
+  };
 }

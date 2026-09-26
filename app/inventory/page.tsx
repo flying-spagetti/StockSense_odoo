@@ -9,8 +9,8 @@ export default async function InventoryPage() {
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
       <h1 className="text-xl font-semibold text-zinc-900">Inventory</h1>
       <p className="mt-1 max-w-prose text-sm text-zinc-600">
-        On-hand quantities are derived from completed stock movements. Draft
-        and void movements are excluded.
+        On-hand quantities are derived from done stock movements. Other
+        statuses are excluded.
       </p>
 
       <div className="mt-6 overflow-hidden rounded-lg border border-zinc-200 bg-white">

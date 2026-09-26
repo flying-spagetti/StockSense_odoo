@@ -12,7 +12,7 @@ export default async function ProductsPage() {
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Master Products Catalog</h2>
           <p className="mt-1 text-xs text-zinc-400 font-mono">
-            On-hand Total Available quantity is strictly derived from completed stock movements.
+            On-hand Total Available quantity is strictly derived from done stock movements.
           </p>
         </div>
       </div>

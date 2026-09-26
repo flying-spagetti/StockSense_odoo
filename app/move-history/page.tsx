@@ -24,7 +24,7 @@ export default function MoveHistoryPage() {
         <MoveHistoryIcon className="mx-auto h-12 w-12 text-zinc-600" />
         <h3 className="mt-4 text-base font-semibold text-white">Movement Audit Ledger</h3>
         <p className="mt-2 text-sm text-zinc-400 max-w-md mx-auto">
-          Every single movement log is recorded here with status (`completed`, `draft`, `void`). This module is configured as a working placeholder for Checkpoint 2.
+          Every single movement log is recorded here with status (`draft`, `waiting`, `ready`, `done`, `canceled`). This module is configured as a working placeholder.
         </p>
       </div>
     </div>

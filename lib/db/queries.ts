@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, desc } from "drizzle-orm";
 import { db } from "./index";
 import { products, stockMovements } from "./schema";
 
@@ -19,6 +19,22 @@ export type InventoryRow = {
   unit: string;
   reorderLevel: number;
   onHand: number;
+};
+
+export type ReceiptDetailRow = {
+  id: string;
+  reference: string;
+  supplier: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  productUnit: string;
+  quantity: number;
+  status: "draft" | "waiting" | "ready" | "done" | "canceled";
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  note: string | null;
+  createdAt: Date;
 };
 
 // In-memory fallback store for offline/demo/testing environments
@@ -65,22 +81,101 @@ const fallbackProducts: ProductRow[] = [
   },
 ];
 
-type FallbackMovement = {
+type ExtendedMovement = {
   id: string;
+  reference: string;
+  supplier: string;
   productId: string;
   kind: "receipt" | "issue";
   quantity: number;
-  status: "completed" | "draft" | "void";
+  status: "draft" | "waiting" | "ready" | "done" | "canceled";
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  note?: string;
+  createdAt: Date;
 };
 
-const fallbackMovements: FallbackMovement[] = [
-  { id: "m1", productId: "10000000-0000-0000-0000-000000000001", kind: "receipt", quantity: 100, status: "completed" },
-  { id: "m2", productId: "10000000-0000-0000-0000-000000000001", kind: "issue", quantity: 30, status: "completed" },
-  { id: "m3", productId: "10000000-0000-0000-0000-000000000001", kind: "receipt", quantity: 5, status: "draft" },
-  { id: "m4", productId: "10000000-0000-0000-0000-000000000001", kind: "issue", quantity: 10, status: "void" },
-  { id: "m5", productId: "10000000-0000-0000-0000-000000000002", kind: "receipt", quantity: 200, status: "completed" },
-  { id: "m6", productId: "10000000-0000-0000-0000-000000000002", kind: "issue", quantity: 180, status: "completed" },
-  { id: "m7", productId: "10000000-0000-0000-0000-000000000003", kind: "receipt", quantity: 300, status: "completed" },
+const fallbackReceiptMovements: ExtendedMovement[] = [
+  {
+    id: "r1",
+    reference: "WH/IN/0001",
+    supplier: "Acme Supplies Ltd.",
+    productId: "10000000-0000-0000-0000-000000000001",
+    kind: "receipt",
+    quantity: 100,
+    status: "done",
+    fromLocationId: null,
+    toLocationId: "WH/Stock",
+    note: "Opening stock receipt",
+    createdAt: new Date("2026-09-20T10:00:00Z"),
+  },
+  {
+    id: "r2",
+    reference: "WH/IN/0002",
+    supplier: "Global Ceramics Co.",
+    productId: "10000000-0000-0000-0000-000000000002",
+    kind: "receipt",
+    quantity: 200,
+    status: "done",
+    fromLocationId: null,
+    toLocationId: "WH/Stock",
+    note: "Bulk mug order",
+    createdAt: new Date("2026-09-22T14:30:00Z"),
+  },
+  {
+    id: "r3",
+    reference: "WH/IN/0003",
+    supplier: "PaperWorks Inc.",
+    productId: "10000000-0000-0000-0000-000000000003",
+    kind: "receipt",
+    quantity: 300,
+    status: "done",
+    fromLocationId: null,
+    toLocationId: "WH/Stock",
+    note: "Notebook shipment",
+    createdAt: new Date("2026-09-24T09:15:00Z"),
+  },
+  {
+    id: "r4",
+    reference: "WH/IN/0004",
+    supplier: "Nordic Apparel Corp",
+    productId: "10000000-0000-0000-0000-000000000001",
+    kind: "receipt",
+    quantity: 50,
+    status: "draft",
+    fromLocationId: null,
+    toLocationId: "WH/Stock",
+    note: "Pending inspection",
+    createdAt: new Date("2026-09-26T08:00:00Z"),
+  },
+];
+
+// Additional issues in fallback to keep derived stock aligned
+const fallbackIssueMovements: ExtendedMovement[] = [
+  {
+    id: "i1",
+    reference: "WH/OUT/0001",
+    supplier: "Retail Sale",
+    productId: "10000000-0000-0000-0000-000000000001",
+    kind: "issue",
+    quantity: 30,
+    status: "done",
+    fromLocationId: "WH/Stock",
+    toLocationId: null,
+    createdAt: new Date("2026-09-21T11:00:00Z"),
+  },
+  {
+    id: "i2",
+    reference: "WH/OUT/0002",
+    supplier: "Retail Sale",
+    productId: "10000000-0000-0000-0000-000000000002",
+    kind: "issue",
+    quantity: 180,
+    status: "done",
+    fromLocationId: "WH/Stock",
+    toLocationId: null,
+    createdAt: new Date("2026-09-23T16:00:00Z"),
+  },
 ];
 
 export async function listProducts(): Promise<ProductRow[]> {
@@ -215,8 +310,8 @@ export async function deleteProductById(id: string): Promise<boolean> {
 }
 
 /**
- * Inventory is derived, never stored. Only movements with status 'completed'
- * contribute: receipts add, issues subtract, and a product with no completed
+ * Inventory is derived, never stored. Only movements with status 'done'
+ * contribute: receipts add, issues subtract, and a product with no done
  * movements reports zero.
  */
 export async function listInventory(): Promise<InventoryRow[]> {
@@ -239,7 +334,7 @@ export async function listInventory(): Promise<InventoryRow[]> {
         stockMovements,
         and(
           eq(stockMovements.productId, products.id),
-          eq(stockMovements.status, "completed"),
+          eq(stockMovements.status, "done"),
         ),
       )
       .groupBy(products.id)
@@ -252,10 +347,12 @@ export async function listInventory(): Promise<InventoryRow[]> {
     // fallback
   }
 
+  const allMoves = [...fallbackReceiptMovements, ...fallbackIssueMovements];
+
   return fallbackProducts
     .map((prod) => {
-      const moves = fallbackMovements.filter(
-        (m) => m.productId === prod.id && m.status === "completed",
+      const moves = allMoves.filter(
+        (m) => m.productId === prod.id && m.status === "done",
       );
       const onHand = moves.reduce((sum, m) => {
         return m.kind === "receipt" ? sum + m.quantity : sum - m.quantity;
@@ -271,4 +368,201 @@ export async function listInventory(): Promise<InventoryRow[]> {
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Receipt Queries
+ */
+export async function getNextReceiptReference(): Promise<string> {
+  let count = fallbackReceiptMovements.length + 1;
+  try {
+    const rows = await db
+      .select({ ref: stockMovements.reference })
+      .from(stockMovements)
+      .where(eq(stockMovements.kind, "receipt"));
+    if (rows.length > 0) {
+      count = rows.length + 1;
+    }
+  } catch (_e) {
+    // use fallback count
+  }
+  const padded = String(count).padStart(4, "0");
+  return `WH/IN/${padded}`;
+}
+
+export async function listReceipts(): Promise<ReceiptDetailRow[]> {
+  try {
+    const rows = await db
+      .select({
+        id: stockMovements.id,
+        reference: stockMovements.reference,
+        supplier: stockMovements.supplier,
+        productId: stockMovements.productId,
+        productName: products.name,
+        productSku: products.sku,
+        productUnit: products.unit,
+        quantity: stockMovements.quantity,
+        status: stockMovements.status,
+        fromLocationId: stockMovements.fromLocationId,
+        toLocationId: stockMovements.toLocationId,
+        note: stockMovements.note,
+        createdAt: stockMovements.createdAt,
+      })
+      .from(stockMovements)
+      .innerJoin(products, eq(stockMovements.productId, products.id))
+      .where(eq(stockMovements.kind, "receipt"))
+      .orderBy(desc(stockMovements.createdAt));
+
+    if (rows.length > 0) {
+      return rows.map((r) => ({
+        ...r,
+        reference: r.reference || "WH/IN/0000",
+        supplier: r.supplier || "Supplier",
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+      }));
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  return [...fallbackReceiptMovements]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((rm) => {
+      const prod = fallbackProducts.find((p) => p.id === rm.productId);
+      return {
+        id: rm.id,
+        reference: rm.reference,
+        supplier: rm.supplier,
+        productId: rm.productId,
+        productName: prod?.name || "Unknown Product",
+        productSku: prod?.sku || "SKU-0000",
+        productUnit: prod?.unit || "pcs",
+        quantity: rm.quantity,
+        status: rm.status,
+        fromLocationId: rm.fromLocationId,
+        toLocationId: rm.toLocationId,
+        note: rm.note || null,
+        createdAt: rm.createdAt,
+      };
+    });
+}
+
+export async function insertReceipt(values: {
+  productId: string;
+  quantity: number;
+  reference: string;
+  supplier: string;
+  toLocationId: string;
+  fromLocationId: null;
+  status: "draft" | "waiting" | "ready" | "done" | "canceled";
+  note?: string;
+}): Promise<ExtendedMovement> {
+  try {
+    const rows = await db
+      .insert(stockMovements)
+      .values({
+        productId: values.productId,
+        kind: "receipt",
+        quantity: values.quantity,
+        status: values.status,
+        reference: values.reference,
+        supplier: values.supplier,
+        fromLocationId: null,
+        toLocationId: values.toLocationId,
+        note: values.note,
+      })
+      .returning();
+
+    if (rows.length > 0) {
+      const r = rows[0];
+      const newMove: ExtendedMovement = {
+        id: r.id,
+        reference: r.reference || values.reference,
+        supplier: r.supplier || values.supplier,
+        productId: r.productId,
+        kind: "receipt",
+        quantity: r.quantity,
+        status: r.status as "draft" | "waiting" | "ready" | "done" | "canceled",
+        fromLocationId: null,
+        toLocationId: r.toLocationId || values.toLocationId,
+        note: r.note || undefined,
+        createdAt: r.createdAt,
+      };
+      fallbackReceiptMovements.unshift(newMove);
+      return newMove;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const newMove: ExtendedMovement = {
+    id: crypto.randomUUID(),
+    reference: values.reference,
+    supplier: values.supplier,
+    productId: values.productId,
+    kind: "receipt",
+    quantity: values.quantity,
+    status: values.status,
+    fromLocationId: null,
+    toLocationId: values.toLocationId,
+    note: values.note,
+    createdAt: new Date(),
+  };
+
+  fallbackReceiptMovements.unshift(newMove);
+  return newMove;
+}
+
+export async function validateReceiptById(id: string): Promise<boolean> {
+  try {
+    const rows = await db
+      .update(stockMovements)
+      .set({ status: "done" })
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "receipt")))
+      .returning();
+
+    if (rows.length > 0) {
+      const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+      if (idx !== -1) {
+        fallbackReceiptMovements[idx].status = "done";
+      }
+      return true;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    fallbackReceiptMovements[idx].status = "done";
+    return true;
+  }
+  return false;
+}
+
+export async function cancelReceiptById(id: string): Promise<boolean> {
+  try {
+    const rows = await db
+      .update(stockMovements)
+      .set({ status: "canceled" })
+      .where(and(eq(stockMovements.id, id), eq(stockMovements.kind, "receipt")))
+      .returning();
+
+    if (rows.length > 0) {
+      const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+      if (idx !== -1) {
+        fallbackReceiptMovements[idx].status = "canceled";
+      }
+      return true;
+    }
+  } catch (_e) {
+    // fallback
+  }
+
+  const idx = fallbackReceiptMovements.findIndex((m) => m.id === id);
+  if (idx !== -1) {
+    fallbackReceiptMovements[idx].status = "canceled";
+    return true;
+  }
+  return false;
 }

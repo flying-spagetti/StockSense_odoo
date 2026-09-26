@@ -19,7 +19,7 @@ export default async function DashboardPage() {
         <div>
           <p className="font-semibold text-amber-200">DOUBLE-ENTRY STOCK ENGINE RULE ACTIVE</p>
           <p className="mt-1 text-amber-300/80">
-            In StockSense, stock quantities are <span className="underline font-bold">never stored</span>. Total Available for every product is computed strictly by aggregating completed stock movements (`receipts` add, `issues` subtract).
+            In StockSense, stock quantities are <span className="underline font-bold">never stored</span>. Total Available for every product is computed strictly by aggregating done stock movements (`receipts` add, `issues` subtract).
           </p>
         </div>
       </div>

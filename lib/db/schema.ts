@@ -15,14 +15,16 @@ export const movementKind = pgEnum("movement_kind", ["receipt", "issue"]);
 
 export const movementStatus = pgEnum("movement_status", [
   "draft",
-  "completed",
-  "void",
+  "waiting",
+  "ready",
+  "done",
+  "canceled",
 ]);
 
 /**
  * Products hold descriptive data only.
  * There is deliberately no stock/quantity column: on-hand quantity is always
- * derived by aggregating completed stock movements (see lib/db/queries.ts).
+ * derived by aggregating done stock movements (see lib/db/queries.ts).
  */
 export const products = pgTable(
   "products",
@@ -48,19 +50,23 @@ export const products = pgTable(
 
 /**
  * Append-only stock movements. A movement only affects inventory when its
- * status is 'completed'; 'draft' and 'void' rows are ignored by the derived
+ * status is 'done'; 'draft', 'waiting', 'ready', and 'canceled' rows are ignored by the derived
  * inventory query.
  */
 export const stockMovements = pgTable(
   "stock_movements",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    reference: text("reference"),
+    supplier: text("supplier"),
     productId: uuid("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
     kind: movementKind("kind").notNull(),
     quantity: integer("quantity").notNull(),
-    status: movementStatus("status").notNull().default("completed"),
+    status: movementStatus("status").notNull().default("draft"),
+    fromLocationId: text("from_location_id"),
+    toLocationId: text("to_location_id"),
     note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -309,7 +309,7 @@ export function ProductsClient({ products }: ProductsClientProps) {
         <div className="flex items-center justify-between border-t border-zinc-800 bg-zinc-950/60 px-4 py-3 font-mono text-xs text-zinc-400">
           <span>Showing {filteredProducts.length} of {products.length} products</span>
           <span className="hidden sm:inline text-zinc-500">
-            Total Available derived from completed stock movements
+            Total Available derived from done stock movements
           </span>
         </div>
       </div>

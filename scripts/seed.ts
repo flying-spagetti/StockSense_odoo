@@ -48,19 +48,19 @@ async function main() {
   const idsBySku = new Map(inserted.map((row) => [row.sku, row.id]));
 
   await db.insert(stockMovements).values([
-    // 100 received, 30 issued, 5 drafted, 10 voided -> 70 on hand.
+    // 100 received, 30 issued, 5 drafted, 10 canceled -> 70 on hand.
     {
       productId: idOf(idsBySku, "SKU-1001"),
       kind: "receipt",
       quantity: 100,
-      status: "completed",
+      status: "done",
       note: "Opening stock",
     },
     {
       productId: idOf(idsBySku, "SKU-1001"),
       kind: "issue",
       quantity: 30,
-      status: "completed",
+      status: "done",
       note: "Shop sale",
     },
     {
@@ -68,13 +68,13 @@ async function main() {
       kind: "receipt",
       quantity: 5,
       status: "draft",
-      note: "Not counted until completed",
+      note: "Not counted until done",
     },
     {
       productId: idOf(idsBySku, "SKU-1001"),
       kind: "issue",
       quantity: 10,
-      status: "void",
+      status: "canceled",
       note: "Entered in error",
     },
     // 200 received, 180 issued -> 20 on hand, below the reorder level.
@@ -82,27 +82,27 @@ async function main() {
       productId: idOf(idsBySku, "SKU-1002"),
       kind: "receipt",
       quantity: 200,
-      status: "completed",
+      status: "done",
     },
     {
       productId: idOf(idsBySku, "SKU-1002"),
       kind: "issue",
       quantity: 180,
-      status: "completed",
+      status: "done",
     },
     // 300 received, nothing issued -> 300 on hand.
     {
       productId: idOf(idsBySku, "SKU-1003"),
       kind: "receipt",
       quantity: 300,
-      status: "completed",
+      status: "done",
     },
     // No movements at all -> 0 on hand.
   ]);
 
   const inventory = await listInventory();
 
-  console.log("\nDerived inventory (completed movements only):");
+  console.log("\nDerived inventory (done movements only):");
 
   for (const row of inventory) {
     console.log(
