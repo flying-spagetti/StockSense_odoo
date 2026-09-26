@@ -1,12 +1,28 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+if (!process.env.DATABASE_URL && existsSync(resolve(process.cwd(), ".env"))) {
+  const envContent = readFileSync(resolve(process.cwd(), ".env"), "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+      const [key, ...val] = trimmed.split("=");
+      if (key && !process.env[key.trim()]) {
+        process.env[key.trim()] = val.join("=").trim();
+      }
+    }
+  }
+}
+
 import { db, pool } from "../lib/db";
 import { listInventory } from "../lib/db/queries";
 import { products, stockMovements } from "../lib/db/schema";
 
 const seedProducts = [
-  { sku: "SKU-1001", name: "Cotton T-Shirt", unit: "pcs", reorderLevel: 20 },
-  { sku: "SKU-1002", name: "Ceramic Mug", unit: "pcs", reorderLevel: 50 },
-  { sku: "SKU-1003", name: "A5 Notebook", unit: "pcs", reorderLevel: 100 },
-  { sku: "SKU-1004", name: "Desk Lamp", unit: "pcs", reorderLevel: 10 },
+  { sku: "SKU-1001", name: "Cotton T-Shirt", category: "Apparel", unit: "pcs", reorderLevel: 20 },
+  { sku: "SKU-1002", name: "Ceramic Mug", category: "Homeware", unit: "pcs", reorderLevel: 50 },
+  { sku: "SKU-1003", name: "A5 Notebook", category: "Stationery", unit: "pcs", reorderLevel: 100 },
+  { sku: "SKU-1004", name: "Desk Lamp", category: "Electronics", unit: "pcs", reorderLevel: 10 },
 ];
 
 function idOf(idsBySku: Map<string, string>, sku: string): string {

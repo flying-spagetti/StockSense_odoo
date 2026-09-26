@@ -30,6 +30,7 @@ export const products = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     sku: text("sku").notNull(),
     name: text("name").notNull(),
+    category: text("category").notNull().default("General"),
     unit: text("unit").notNull().default("unit"),
     reorderLevel: integer("reorder_level").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })

@@ -5,6 +5,7 @@ export type ProductFormState = {
 export type ProductInput = {
   sku: string;
   name: string;
+  category: string;
   unit: string;
   reorderLevel: number;
 };
@@ -23,7 +24,8 @@ export function parseProductForm(formData: FormData): ProductFormResult {
 
   const sku = readText(formData, "sku");
   const name = readText(formData, "name");
-  const unit = readText(formData, "unit") || "unit";
+  const category = readText(formData, "category") || "General";
+  const unit = readText(formData, "unit") || "pcs";
   const rawReorderLevel = readText(formData, "reorderLevel");
 
   if (!sku) {
@@ -36,6 +38,10 @@ export function parseProductForm(formData: FormData): ProductFormResult {
     errors.name = "Name is required.";
   } else if (name.length > 200) {
     errors.name = "Name must be 200 characters or fewer.";
+  }
+
+  if (category.length > 64) {
+    errors.category = "Category must be 64 characters or fewer.";
   }
 
   if (unit.length > 32) {
@@ -51,5 +57,5 @@ export function parseProductForm(formData: FormData): ProductFormResult {
     return { errors };
   }
 
-  return { data: { sku, name, unit, reorderLevel } };
+  return { data: { sku, name, category, unit, reorderLevel } };
 }

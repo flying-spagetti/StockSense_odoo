@@ -53,9 +53,9 @@ export async function updateProduct(
     return { errors: result.errors };
   }
 
-  const { name, unit, reorderLevel } = result.data;
+  const { name, category, unit, reorderLevel } = result.data;
 
-  const updated = await updateProductById(id, { name, unit, reorderLevel });
+  const updated = await updateProductById(id, { name, category, unit, reorderLevel });
 
   if (!updated) {
     return { errors: { form: "That product no longer exists." } };
