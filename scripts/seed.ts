@@ -40,15 +40,30 @@ function idOf(idsBySku: Map<string, string>, sku: string): string {
 async function main() {
   console.log("Ensuring database tables exist...");
 
-  // Execute table DDL if missing
+  // Execute table DDL if missing or update existing tables
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       login_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'inventory_manager',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'inventory_manager';
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
     );
   `);
 
@@ -72,12 +87,14 @@ async function main() {
       loginId: "demo_user",
       email: "demo@stocksense.app",
       passwordHash,
+      role: "inventory_manager",
     })
     .onConflictDoUpdate({
       target: users.loginId,
       set: {
         email: "demo@stocksense.app",
         passwordHash,
+        role: "inventory_manager",
         updatedAt: new Date(),
       },
     });

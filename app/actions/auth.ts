@@ -19,6 +19,7 @@ import {
   type AuthFormState,
 } from "@/lib/validation";
 import { createSessionCookie, destroySessionCookie, getSession } from "@/lib/session";
+import { sendOtpEmail } from "@/lib/email";
 
 export async function loginAction(
   _prevState: AuthFormState,
@@ -60,10 +61,13 @@ export async function requestOtpAction(emailOrLoginId: string): Promise<{
   const emailToUse = user ? user.email : (emailOrLoginId.includes("@") ? emailOrLoginId : `${emailOrLoginId}@stocksense.app`);
 
   const code = await createOtpCode(emailToUse);
+  const dispatch = await sendOtpEmail(emailToUse, code);
 
   return {
     success: true,
-    message: `OTP sent to ${emailToUse}. Code generated successfully!`,
+    message: dispatch.method === "smtp" 
+      ? `OTP code emailed to ${emailToUse}. Please check your inbox.`
+      : `OTP code dispatched to ${emailToUse}. (Demo verification code: ${code})`,
     code,
   };
 }

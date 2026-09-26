@@ -2396,26 +2396,35 @@ export type UserRow = {
   updatedAt: Date;
 };
 
-const fallbackUsers: UserRow[] = [
-  {
-    id: "u1",
-    loginId: "demo_user",
-    email: "demo@stocksense.app",
-    passwordHash: bcrypt.hashSync("Demo@123", 10),
-    role: "inventory_manager",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "u2",
-    loginId: "staff_user",
-    email: "staff@stocksense.app",
-    passwordHash: bcrypt.hashSync("Demo@123", 10),
-    role: "warehouse_staff",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
+const globalForStore = globalThis as unknown as {
+  fallbackUsers?: UserRow[];
+  fallbackOtpCodes?: OtpRecord[];
+};
+
+if (!globalForStore.fallbackUsers) {
+  globalForStore.fallbackUsers = [
+    {
+      id: "u1",
+      loginId: "demo_user",
+      email: "demo@stocksense.app",
+      passwordHash: bcrypt.hashSync("Demo@123", 10),
+      role: "inventory_manager",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: "u2",
+      loginId: "staff_user",
+      email: "staff@stocksense.app",
+      passwordHash: bcrypt.hashSync("Demo@123", 10),
+      role: "warehouse_staff",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+}
+
+const fallbackUsers = globalForStore.fallbackUsers;
 
 export async function getUserByLoginId(loginId: string): Promise<UserRow | null> {
   const target = loginId.trim().toLowerCase();
@@ -2640,7 +2649,11 @@ export type OtpRecord = {
   createdAt: Date;
 };
 
-const fallbackOtpCodes: OtpRecord[] = [];
+if (!globalForStore.fallbackOtpCodes) {
+  globalForStore.fallbackOtpCodes = [];
+}
+
+const fallbackOtpCodes = globalForStore.fallbackOtpCodes;
 
 export async function createOtpCode(email: string): Promise<string> {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
